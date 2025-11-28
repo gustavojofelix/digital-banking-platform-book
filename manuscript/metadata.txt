@@ -1,0 +1,5 @@
+title: Modern Digital Banking: Building a Cloud-Ready Banking Platform with .NET 9 & Angular
+author: Gustavo Felix
+email: gustavojofelix@gmail.com
+
+edition: first
