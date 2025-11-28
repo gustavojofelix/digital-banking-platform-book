@@ -161,68 +161,54 @@ We will not apply these buzzwords blindly. Each pattern we use has to **earn its
 
 Let’s look at how everything connects.
 
-### High-Level Blueprint
-
 From the outside world:
 
 - Users open the **Web Banking App** in the browser.
 - The app talks to the **API Gateway**.
 - The gateway routes calls to backend services such as IAM, Accounts, Transactions, or Customers.
-- Some actions trigger **events** on a message bus (e.g., RabbitMQ).
+- Some actions trigger **events** on a message bus.
 - Other services (like Notifications) subscribe to those events and react asynchronously.
 
-We can sketch this as a simple flow:
+At a high level, the architecture looks like this:
+
+![Banking Suite High-Level Architecture](images/architecture.png)
+
+### Components Overview
 
 - **Frontend**
 
-  - Angular + Nx workstation for multiple apps (customer app, admin app)
+  - Angular + Nx workspace for multiple apps (customer app, admin app)
 
 - **API Gateway**
 
   - YARP-based .NET gateway
-  - Handles routing and basic cross-cutting concerns (like auth check & forwarding claims)
+  - Handles routing and basic cross-cutting concerns (auth check, forwarding claims)
 
-- **Backend Microservices** (each with Clean Architecture and its own database)
+- **Backend Microservices**  
+  Each with its own Clean Architecture layers and database:
 
-  - IAM Service
-  - Customer Service
-  - Account Service
-  - Transaction Service
-  - Notification Service
+  - **IAM Service** — authentication, authorization, and (optionally) tenants
+  - **Customer Service** — customer profiles and basic KYC-style data
+  - **Account Service** — customer bank accounts, account types, lifecycle, balances
+  - **Transaction Service** — deposits, withdrawals, transfers, transaction history
+  - **Notification Service** — reacts to events and sends email/SMS notifications
 
 - **Messaging**
 
   - RabbitMQ (or similar) for event-driven communication between services
+  - Example events: `AccountCreated`, `TransactionCompleted`, `PasswordChanged`
 
 - **Databases**
 
-  - PostgreSQL instances (per service or per bounded context)
+  - PostgreSQL per service or per bounded context
+  - Clear separation of data ownership between microservices
 
 - **DevOps & Tooling**
   - GitHub repository (monorepo or structured multi-repo)
   - GitHub Actions pipelines for build → test → lint → package
-  - Docker Compose for local orchestration
+  - Docker Compose for local orchestration of all services
 
-You can also represent this visually using a diagram in your book, for example:
-
-```mermaid
-flowchart LR
-  User[User (Browser)] --> Frontend[Angular Web App]
-  Frontend --> Gateway[API Gateway (YARP)]
-  Gateway --> IAM[IAM Service]
-  Gateway --> Customer[Customer Service]
-  Gateway --> Account[Account Service]
-  Gateway --> Tx[Transaction Service]
-
-  Tx -->|events| MQ[(RabbitMQ)]
-  Account -->|events| MQ
-  MQ --> Notification[Notification Service]
-
-  Account --> ADB[(Accounts DB)]
-  Tx --> TDB[(Transactions DB)]
-  Customer --> CDB[(Customers DB)]
-  IAM --> IDB[(IAM DB)]
-```
+This blueprint serves as the mental map for everything we build in the rest of the book.
 
 ## 1.6 What You Will Achieve as a Reader
 
