@@ -209,7 +209,7 @@ Consider a **deposit**:
 
 Visually, you can represent this flow with a diagram such as:
 
-![Event-Driven Flow: Deposit → Event → Notification](images/event-flow.png)
+![Event-Driven Flow: Deposit → Event → Notification](event-flow.png)
 
 ---
 
@@ -333,11 +333,11 @@ To communicate the architecture to other people (and to future you), it’s usef
 - A **System Context diagram** — the Banking Suite as a single system and the external actors around it.
 - A **Container diagram** — the main containers (frontend, gateway, microservices, databases, message broker) and how they relate.
 
-![System Context Diagram](images/c4-system-context.png)
+![System Context Diagram](c4-system-context.png)
 
 _System Context — the Banking Suite as seen by users and external systems._
 
-![Container Diagram](images/c4-container.png)
+![Container Diagram](c4-container.png)
 
 _Container View — frontend, gateway, microservices, databases, and messaging._
 
