@@ -171,7 +171,7 @@ From the outside world:
 
 At a high level, the architecture looks like this:
 
-![Banking Suite High-Level Architecture](images/architecture.png)
+![Banking Suite High-Level Architecture](architecture.png)
 
 ### Components Overview
 
