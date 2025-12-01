@@ -140,7 +140,8 @@ cd src/backend/AccountService/AccountService.Api
 dotnet run
 ```
 
-Open your browser at `https://localhost:5001` or whatever URL the console shows. You should see the default API response or Swagger (depending on the template version).
+Open your browser at `https://localhost:5001/weatherforecast` or whatever URL the console shows. You should see the default API response or Swagger (depending on the template version).
+![alt text](image.png)
 
 Once you’re satisfied that:
 
