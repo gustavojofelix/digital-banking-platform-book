@@ -46,6 +46,51 @@ T> Keeping a separate branch per chapter makes it easy to review your work, roll
 
 ---
 
+### 4.1.1 Ensuring `.gitignore` Is Ready for Containers
+
+Before we start creating projects and running `dotnet` or Docker commands, let’s make sure Git ignores all the noisy build artifacts.
+
+At the root of your repository, create (or update) a `.gitignore` file:
+
+```bash
+cd digital-banking-suite
+touch .gitignore
+```
+
+Open `.gitignore` and add the following:
+
+```text
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# IDE / editor settings
+.vscode/
+.vs/
+*.user
+*.suo
+
+# .NET build outputs
+**/bin/
+**/obj/
+**/out/
+
+# Node / Angular (used later in the book)
+node_modules/
+dist/
+.nx/
+.angular/
+
+# Logs
+*.log
+
+# Misc
+*.tmp
+*.swp
+```
+
+T> We keep a **single `.gitignore` at the repo root** so all backend, frontend, and infra projects share the same ignore rules. This prevents accidentally committing `bin/`, `obj/`, `node_modules/`, and other generated files when we start building and running our services.
+
 ## 4.2 Why Containers for a Digital Banking Platform?
 
 You could technically build this whole system without containers.
@@ -459,7 +504,51 @@ T> `docker ps` (is it running?) and `docker logs <container-name>` (what went wr
 
 ---
 
-## 4.11 Wrap-up: PR, CI & Merge to `develop`
+## 4.11 Updating the CI Pipeline for Backend Projects
+
+In Chapter 3 we added a minimal CI pipeline that tried to restore the backend like this:
+
+```bash
+dotnet restore ./src/backend
+```
+
+This works only if the current folder directly contains a `.csproj` or `.sln` file.  
+In our structure, the backend projects live deeper (for example `src/backend/AccountService/AccountService.Api/AccountService.Api.csproj`), so the CI job fails with:
+
+> `MSBUILD : error MSB1003: Specify a project or solution file. The current working directory does not contain a project or solution file.`
+
+Let’s fix the pipeline so it restores **all backend projects** under `src/backend`.
+
+Open `.github/workflows/ci.yml` and replace the backend restore step with:
+
+```yaml
+- name: Restore .NET backend projects (if any)
+  run: |
+    if [ -d "./src/backend" ]; then
+      # Find all .csproj files under src/backend
+      projects=$(find ./src/backend -name "*.csproj")
+
+      if [ -z "$projects" ]; then
+        echo "No .NET backend projects found yet."
+      else
+        echo "Restoring .NET backend projects..."
+        for proj in $projects; do
+          echo "Restoring $proj"
+          dotnet restore "$proj"
+        done
+      fi
+    else
+      echo "No backend folder yet."
+    fi
+```
+
+From now on:
+
+- If there are **no backend projects yet**, CI prints a message and succeeds.
+- As soon as we add services like `AccountService`, each `*.csproj` is restored individually.
+- The same pattern will continue to work as we add more microservices (IAM, Customer, Transaction, etc.).
+
+## 4.12 Wrap-up: PR, CI & Merge to `develop`
 
 At this point you should have, on the branch  
 `feature/ch04-docker-from-day-zero`:
@@ -471,7 +560,7 @@ At this point you should have, on the branch
 
 Now we finish the Git workflow for the chapter.
 
-### 4.11.1 Committing Your Changes
+### 4.12.1 Committing Your Changes
 
 Stage and commit your work in logical chunks. For example:
 
@@ -488,7 +577,7 @@ git commit -m "docs(ch04): document Docker from day zero"
 
 T> You don’t need to perfectly match these messages, but keep them **clear and scoped**. Avoid “misc changes” or “stuff”.
 
-### 4.11.2 Pushing and Opening a Pull Request
+### 4.12.2 Pushing and Opening a Pull Request
 
 Push the branch to GitHub:
 
@@ -507,7 +596,7 @@ Then, in GitHub:
    - Dockerfile and docker-compose.dev.yml
    - Documentation for Chapter 4
 
-### 4.11.3 Watching the CI Pipeline
+### 4.12.3 Watching the CI Pipeline
 
 When you open the PR, the CI workflow (`.github/workflows/ci.yml`) should run automatically.
 
@@ -524,7 +613,7 @@ Later in the book we will enhance CI to:
 
 W> Do not merge into `develop` if the pipeline is red. Fix the issue (build errors, missing files, etc.), push again, and wait for CI to pass.
 
-### 4.11.4 Merging to `develop`
+### 4.12.4 Merging to `develop`
 
 Once the pipeline is green:
 
@@ -548,7 +637,7 @@ At this point:
 
 ---
 
-## 4.12 Summary & What’s Next
+## 4.13 Summary & What’s Next
 
 In this chapter, we:
 
