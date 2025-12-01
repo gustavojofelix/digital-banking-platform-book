@@ -491,6 +491,55 @@ git commit -m "chore: add initial CI pipeline skeleton"
 git push
 ```
 
+### 3.8.1 Seeing the Pipeline in Action
+
+Before we move on to the next chapter, let’s actually **see the CI pipeline run**.
+
+1. Make sure all your Chapter 3 work is committed on the feature branch:
+
+```bash
+git status
+git add .
+git commit -m "chore: finish chapter 3 setup"
+```
+
+2.  On GitHub, open a **Pull Request**:
+
+    - Base branch: `develop`
+    - Compare branch: `feature/ch03-dev-environment`
+
+3.  When you create the PR, GitHub will trigger the **CI workflow** (the `ci.yml` file you added).  
+    You should see a “Checks” section appear on the PR and the workflow run.
+
+4.  After the CI checks are **green**, merge the PR into `develop`.
+
+5.  Following are the screenshots of the github steps to create a PR (pretty mucha self explanatory, just follow the seuence of the images, the important sections I have highleted in red square).
+
+        - On Gihub repository of your project select the `Code` tab, make sure you selcted the correct branch, in our case is `feature/ch03-dev-environment` and the click on the `Compare & pull request` green button.
+
+    ![PR Step1](pr1.png) - On the next screen make sure you select base branch `develop` and compare to `feature/ch03-dev-environment` then click on the `Create pull request` green button.
+    ![PR Step1](pr2.png) - On the next screen you will see that the pipeline was triggered and that there are no conflicts. Click on the `Merge Pull request`.
+    ![PR Step1](pr3.png) - Next step click the `Confirm merge` green button.
+    ![PR Step1](pr4.png) - Now when we go back to the reposiotry and select the `Action` tab yous should see the workflows for your pipeline running.
+    ![PR Step1](pr5.png) - And finally you can see the details of the pipeline by clicking on the `build` step.
+    ![PR Step1](pr6.png) - And...
+    ![PR Step1](pr7.png)
+
+From now on, we’ll **keep feature branches as chapter references** instead of deleting them, for example:
+
+- `feature/ch03-dev-environment`
+- `feature/ch04-domain-architecture`
+- `feature/ch05-security-basics`
+- `...`
+
+When you’re ready to start the next chapter, create a new feature branch from `develop`, such as:
+
+```bash
+git checkout develop
+git pull
+git checkout -b feature/ch04-backend-foundation
+```
+
 ## 3.9 Summary & What’s Next
 
 In this chapter, you:
