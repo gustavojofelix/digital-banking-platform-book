@@ -3,3 +3,4 @@
 02-chapter-vision.md
 03-domain-architecture.md
 04-dev-environment.md
+05-docker-from-day-zero.md
