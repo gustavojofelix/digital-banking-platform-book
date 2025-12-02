@@ -5,3 +5,4 @@
 04-dev-environment.md
 05-docker-from-day-zero.md
 06-backend-solution-structure.md
+07-backend-testing-foundations.md
