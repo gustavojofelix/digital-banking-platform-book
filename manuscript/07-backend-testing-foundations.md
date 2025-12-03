@@ -11,8 +11,9 @@ By the end of this chapter, you will:
 
 - Understand the basic **testing strategy** for the Banking Suite backend.
 - Create a **test project** for the backend (`BuildingBlocks.UnitTests`).
-- Add the first **meaningful tests** for `Result` and `ValueObject`.
+- Add the first **meaningful tests** for `Result`, `ValueObject`, and `Entity`.
 - Wire backend tests into **GitHub Actions** so every PR runs tests.
+- Generate **code coverage reports**, view them in **VS Code**, and publish them as artifacts in **GitHub Actions**.
 
 ---
 
@@ -40,7 +41,7 @@ git pull origin develop
 git checkout -b feature/ch06-backend-testing-foundations
 ```
 
-All changes for this chapter (test project, test code, CI updates, docs) will happen on this branch.
+All changes for this chapter (test project, test code, coverage setup, CI updates, docs) will happen on this branch.
 
 T> This chapter is intentionally small but important. You’ll feel its impact every time CI catches a bug before it hits `develop`.
 
@@ -69,6 +70,7 @@ In this chapter, we start with:
 - **Unit tests for `BuildingBlocks`**:
   - `Result` – ensure success/failure behaves correctly.
   - `ValueObject` – equality semantics.
+  - `Entity` – identity-based equality.
 
 I> Starting with shared building blocks is a great way to ensure the foundation is solid before we build business-critical logic on top of it.
 
@@ -156,7 +158,46 @@ We want to be confident that `Result` and `Result<T>` behave as expected:
 - `Result.Failure("error")` → `IsSuccess == false`, `IsFailure == true`, `Error` contains our message.
 - The same semantics for `Result<T>`.
 
-Create `src/backend/BuildingBlocks.UnitTests/ResultTests.cs`:
+First, we’ll add `coverlet.msbuild` so this test project can produce coverage (we’ll use it later).
+
+Open `src/backend/BuildingBlocks.UnitTests/BuildingBlocks.UnitTests.csproj` and ensure it looks like this (versions can differ slightly):
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit" Version="2.9.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+
+    <!-- Coverage support via Coverlet -->
+    <PackageReference Include="coverlet.msbuild" Version="6.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BuildingBlocks\BuildingBlocks.csproj" />
+  </ItemGroup>
+
+</Project>
+```
+
+Restore packages:
+
+```bash
+cd digital-banking-suite/src/backend
+dotnet restore BuildingBlocks.UnitTests/BuildingBlocks.UnitTests.csproj
+```
+
+Now create `src/backend/BuildingBlocks.UnitTests/ResultTests.cs`:
 
 ```csharp
 using BuildingBlocks;
@@ -242,7 +283,7 @@ Next, let’s verify that our `ValueObject` base class behaves correctly for equ
 
 To do that, we’ll:
 
-1. Create a simple test-only value object, e.g. `Money`.
+1. Create a simple test-only value object, e.g. `TestMoney`.
 2. Write tests that compare different instances.
 
 Create `src/backend/BuildingBlocks.UnitTests/TestMoney.cs`:
@@ -418,47 +459,281 @@ All tests should still pass.
 
 ---
 
-## 6.8 Updating CI to Run Backend Tests
+## 6.8 Visualizing Coverage in VS Code
 
-In Chapter 5, we updated CI to:
+Tests passing is great, but it’s even better when you can **see what they’re covering**.
 
-- Restore all backend projects.
-- Build `BankingSuite.Backend.sln`.
+In this section you’ll:
 
-Now that we have tests, we want CI to also:
+- Generate a coverage file from `dotnet test`.
+- Use **Coverage Gutters** to show line coverage inside VS Code.
+- Use **HTML Preview** (George Oliveira) to view a rich HTML coverage report **without leaving VS Code**.
+- Ignore coverage artifacts in Git so they don’t pollute your repo.
 
-- **Run backend tests** using `dotnet test` on the solution.
+A small but important detail:
 
-Open `.github/workflows/ci.yml` and add a new step **after** the backend build step:
+I> The `CoverletOutput` path is **relative to each test project’s `.csproj`**, not to the directory you run `dotnet test` from. We’ll use that to generate a single `lcov.info` file at the **root of the repository**, which works nicely with Coverage Gutters.
 
-```yaml
-- name: Run backend tests (if backend solution exists)
-  run: |
-    if [ -f "./src/backend/BankingSuite.Backend.sln" ]; then
-      echo "Running backend tests..."
-      dotnet test ./src/backend/BankingSuite.Backend.sln --configuration Release --no-build
-    else
-      echo "No backend solution found yet. Skipping tests."
-    fi
+### 6.8.1 Generating Coverage Locally (lcov.info at Repo Root)
+
+We want `lcov.info` to end up at:
+
+```text
+digital-banking-suite/
+  lcov.info
 ```
 
-This step:
+We can achieve that by telling Coverlet to write `../../../lcov` from each test project folder.
 
-- Checks if `BankingSuite.Backend.sln` exists.
-- If it does, runs all tests in the solution in **Release** configuration.
-- Uses `--no-build` to avoid rebuilding (the previous step already built the solution).
+From the **repo root**:
 
-From now on, every PR will:
+```bash
+cd digital-banking-suite
 
-- Restore backend projects.
-- Build the backend solution.
-- Run all backend tests.
+dotnet test src/backend/BankingSuite.Backend.sln \
+  /p:CollectCoverage=true \
+  /p:CoverletOutput=../../../lcov \
+  /p:CoverletOutputFormat=lcov
+```
 
-W> If tests fail, the CI pipeline fails. That’s **exactly what we want** — no broken code should merge into `develop`.
+Why `../../../lcov`?
+
+- Our test project lives at: `src/backend/BuildingBlocks.UnitTests/BuildingBlocks.UnitTests.csproj`
+- From that folder:
+  - `..` → `src/backend`
+  - `../..` → `src`
+  - `../../..` → `digital-banking-suite` (repo root)
+
+So `../../../lcov` becomes:
+
+```text
+digital-banking-suite/lcov.info
+```
+
+Later, when you add more test projects (e.g. `AccountService.UnitTests`), you can use the same relative path and they’ll all write/merge into the same `lcov.info` at the root.
+
+### 6.8.2 Showing Line Coverage with Coverage Gutters
+
+Coverage Gutters, by default, looks for a file named `lcov.info` (among others) in your workspace.
+
+Now that you have `digital-banking-suite/lcov.info`:
+
+1. Make sure the folder open as your workspace in VS Code is **`digital-banking-suite`**.
+2. Open a file you care about, for example:  
+   `src/backend/BuildingBlocks/Result.cs`
+3. Press `Ctrl+Shift+P` → **Coverage Gutters: Watch** (or **Coverage Gutters: Display Coverage**).
+
+Coverage Gutters will automatically detect `lcov.info` at the root and show:
+
+- Green lines — covered by tests.
+- Red lines — not covered.
+
+Whenever you change tests or code:
+
+- Re-run the `dotnet test ... /p:CollectCoverage=true ...` command.
+- Coverage Gutters (in Watch mode) will refresh the markers.
+  ![alt text](image-2.png)
+
+### 6.8.3 Viewing a Full HTML Coverage Report Inside VS Code
+
+Line markers are useful, but sometimes you want **percentages per file/class/namespace**.
+
+We’ll use:
+
+- **ReportGenerator** to turn `lcov.info` into HTML.
+- **HTML Preview** (extension by **George Oliveira**) to view `index.html` inside VS Code.
+
+#### Step 1 — Install ReportGenerator
+
+Install the .NET global tool (once per machine):
+
+```bash
+dotnet tool install -g dotnet-reportgenerator-globaltool
+```
+
+#### Step 2 — Generate an HTML report
+
+We’ll read from the root-level `lcov.info` and write the report under `src/backend/coverage-report`.
+
+From the backend folder:
+
+```bash
+cd digital-banking-suite
+
+reportgenerator \
+  -reports:lcov.info \
+  -targetdir:src/backend/coverage-report \
+  "-reporttypes:Html;TextSummary"
+```
+
+This creates:
+
+```text
+src/backend/
+  coverage-report/
+    index.html
+    Summary.txt
+    ...
+```
+
+#### Step 3 — View the report with HTML Preview (George Oliveira)
+
+1. In VS Code, install the extension:  
+   **“HTML Preview” by George Oliveira**.
+2. In the Explorer, navigate to:  
+   `src/backend/coverage-report/index.html`
+3. Press `Ctrl + Shift + V`.
+
+You’ll see a full coverage dashboard:
+
+- Overall coverage percentage.
+- Coverage per assembly, namespace, and class.
+- Progress bars and color indicators.
+
+All **inside VS Code**, no external browser needed.
+![alt text](image-1.png)
+
+### 6.8.4 Ignoring Coverage Artifacts in Git
+
+Coverage files and reports are **generated artifacts**. You don’t want them in your repository.
+
+At the root of your repo, update `.gitignore` to include:
+
+```text
+# Test / coverage outputs
+TestResults/
+coverage-report/
+coverage.info
+lcov.info
+coverage.cobertura.xml
+```
+
+T> It’s a good practice to **never commit coverage outputs**. They change constantly and are specific to each run. Instead, regenerate them locally or download them from CI artifacts when needed.
 
 ---
 
-## 6.9 Local Sanity Check Before Committing
+## 6.9 Updating CI to Run Backend Tests with Coverage
+
+In previous chapters, CI was responsible for:
+
+- Restoring backend projects.
+- Building `BankingSuite.Backend.sln`.
+- Running tests.
+
+Now we’ll extend it to:
+
+1. Run tests **with coverage** (writing `lcov.info` at the repo root, just like we did locally).
+2. Generate an **HTML coverage report** with ReportGenerator.
+3. Upload the report as a **GitHub Actions artifact**.
+4. Append a **coverage summary** into the run summary.
+
+GitHub Actions uses a Linux runner by default, so the steps will look like the bash commands we used locally.
+
+Open `.github/workflows/ci.yml` and, in your backend job, update / add steps roughly like this (adapt names if your job is called differently).
+
+### 6.9.1 Running Tests with Coverage in CI
+
+We want CI to produce the same `lcov.info` file we used locally at the **repo root**:
+
+```yaml
+- name: Run backend tests with coverage
+  run: |
+    dotnet test src/backend/BankingSuite.Backend.sln \
+      /p:CollectCoverage=true \
+      /p:CoverletOutput=../../../lcov \
+      /p:CoverletOutputFormat=lcov
+```
+
+Why `../../../lcov`?
+
+- Our test project lives at: `src/backend/BuildingBlocks.UnitTests/BuildingBlocks.UnitTests.csproj`.
+- From that folder:
+  - `..` → `src/backend`
+  - `../..` → `src`
+  - `../../..` → `digital-banking-suite` (repo root).
+
+So `CoverletOutput=../../../lcov` means **each test project** will write (or merge) coverage into:
+
+```text
+digital-banking-suite/lcov.info
+```
+
+which is exactly what we used for local visualization and is easy for CI + ReportGenerator to consume.
+
+### 6.9.2 Installing ReportGenerator in CI
+
+Add a step to install the ReportGenerator tool:
+
+```yaml
+- name: Install ReportGenerator
+  run: dotnet tool install -g dotnet-reportgenerator-globaltool
+```
+
+On GitHub’s Ubuntu runners, `.NET` global tools are placed on the PATH and can be used directly as `reportgenerator` in later steps.
+
+### 6.9.3 Generating the HTML Coverage Report in CI
+
+Now generate the HTML + text summary report, writing it into `src/backend/coverage-report` (same place we used locally with VS Code):
+
+```yaml
+- name: Generate coverage report
+  run: |
+    reportgenerator \
+      -reports:lcov.info \
+      -targetdir:src/backend/coverage-report \
+      "-reporttypes:Html;TextSummary"
+```
+
+After this step, the runner will have:
+
+```text
+digital-banking-suite/
+  lcov.info
+  src/backend/
+    coverage-report/
+      index.html
+      Summary.txt
+      ...
+```
+
+### 6.9.4 Uploading the Coverage Report as an Artifact
+
+Now upload the `coverage-report` folder so you can download and inspect it from GitHub’s Actions UI:
+
+```yaml
+- name: Upload coverage report
+  uses: actions/upload-artifact@v4
+  with:
+    name: backend-coverage-report
+    path: src/backend/coverage-report
+```
+
+After a pipeline run, go to:
+
+- **Actions → select the run → Artifacts → backend-coverage-report**
+
+Download the zip and open `index.html` to see the full report (same UI you see locally via HTML Preview).
+
+### 6.9.5 Adding a Coverage Summary to the Run Summary
+
+ReportGenerator created a `Summary.txt` file in `src/backend/coverage-report/`.  
+We can append it to the GitHub Actions **run summary**:
+
+```yaml
+- name: Append coverage summary to job summary
+  run: |
+    echo '## Backend Code Coverage' >> $GITHUB_STEP_SUMMARY
+    echo '' >> $GITHUB_STEP_SUMMARY
+    cat src/backend/coverage-report/Summary.txt >> $GITHUB_STEP_SUMMARY
+```
+
+Now each run’s **Summary** tab will show a coverage section with overall percentages, without downloading anything.
+
+W> All of these steps should be placed **after** the “build backend solution” step. If tests fail, the coverage/report steps will fail too—and that’s what we want.
+
+---
+
+## 6.10 Local Sanity Check Before Committing
 
 Before committing, run the whole flow locally:
 
@@ -468,15 +743,24 @@ cd digital-banking-suite/src/backend
 # Build solution
 dotnet build BankingSuite.Backend.sln --configuration Release
 
-# Run tests
-dotnet test BankingSuite.Backend.sln --configuration Release --no-build
+# Run tests with coverage (same pattern as CI)
+dotnet test BankingSuite.Backend.sln \
+  /p:CollectCoverage=true \
+  /p:CoverletOutput=./coverage \
+  /p:CoverletOutputFormat=lcov
+
+# Generate HTML coverage report
+reportgenerator \
+  -reports:coverage.info \
+  -targetdir:coverage-report \
+  -reporttypes:Html;TextSummary
 ```
 
-If both commands succeed, you’re ready to commit.
+If all commands succeed and you can open `coverage-report/index.html` locally, you’re ready to commit.
 
 ---
 
-## 6.10 Wrap-up: PR, CI & Merge to `develop`
+## 6.11 Wrap-up: PR, CI & Merge to `develop`
 
 At this point you should have, on the branch  
 `feature/ch06-backend-testing-foundations`:
@@ -485,28 +769,45 @@ At this point you should have, on the branch
 - Tests for:
   - `Result` / `Result<T>`
   - `ValueObject` equality (with `TestMoney`)
-  - (Optional) `Entity` equality (with `TestEntity`)
+  - `Entity` equality (with `TestEntity`, optional but recommended)
 - `BuildingBlocks.UnitTests` added to `BankingSuite.Backend.sln`.
-- CI updated to run `dotnet test` for the backend.
+- Local coverage visualization wired up:
+  - `dotnet test` with coverage → `TestResults/coverage.info`
+  - Coverage Gutters for inline coverage in VS Code
+  - ReportGenerator + HTML Preview for HTML reports inside VS Code
+- CI updated to:
+  - Run tests with coverage
+  - Generate HTML and text summary via ReportGenerator
+  - Upload the coverage report as an artifact
+  - Append a coverage summary to the run summary
+- This chapter’s markdown (if you keep docs in the repo).
 
 Now we finish the Git workflow for the chapter.
 
-### 6.10.1 Committing Your Changes
+### 6.11.1 Committing Your Changes
 
 Stage and commit your work in logical chunks. For example:
 
 ```bash
 git add src/backend/BuildingBlocks.UnitTests/*
 git add src/backend/BuildingBlocks.UnitTests/BuildingBlocks.UnitTests.csproj
-git commit -m "test(building-blocks): add unit tests for Result, ValueObject, and Entity"
+git commit -m "test(building-blocks): add unit tests for Result, ValueObject and Entity"
 
+git add src/backend/TestResults/.gitkeep || true
 git add .github/workflows/ci.yml
-git commit -m "chore(ci): run backend tests in pipeline"
+git commit -m "chore(ci): run backend tests with coverage and publish report"
+
+git add src/backend/.gitignore || true
+git add .gitignore
+git commit -m "chore(gitignore): ignore coverage and TestResults artifacts"
+
+git add docs/07-backend-testing-foundations.md
+git commit -m "docs(ch06): document backend testing and coverage visualization"
 ```
 
 T> As always, keep commits **focused and descriptive**. It makes PR review and future archaeology much easier.
 
-### 6.10.2 Pushing and Opening a Pull Request
+### 6.11.2 Pushing and Opening a Pull Request
 
 Push the branch to GitHub:
 
@@ -523,22 +824,26 @@ Then, in GitHub:
 3. Briefly describe what this PR adds:
    - `BuildingBlocks.UnitTests` project
    - Unit tests for `Result`, `ValueObject`, and `Entity`
-   - CI update to run backend tests
-   - Chapter 6 documentation
+   - Local coverage visualization (Coverage Gutters + HTML Preview)
+   - CI coverage report + artifact + summary
 
-### 6.10.3 Watching the CI Pipeline
+![alt text](image-3.png)
+
+### 6.11.3 Watching the CI Pipeline
 
 When you open the PR, the CI workflow should:
 
 - Restore all backend projects.
 - Build `BankingSuite.Backend.sln`.
-- Run `dotnet test` against the backend solution.
+- Run `dotnet test` with coverage.
+- Generate coverage reports and summary.
+- Upload a `backend-coverage-report` artifact.
 
-If any test fails, the pipeline will be red. Fix the issue locally, push again, and wait for CI to turn green.
+If any test fails, or coverage generation fails, the pipeline will be red. Fix the issue locally, push again, and wait for CI to turn green.
 
-W> Never merge a red pipeline. Broken tests in `develop` are a productivity killer.
+W> Never merge a red pipeline. Broken tests or coverage steps in `develop` are a productivity killer.
 
-### 6.10.4 Merging to `develop`
+### 6.11.4 Merging to `develop`
 
 Once the pipeline is green:
 
@@ -557,12 +862,12 @@ Once the pipeline is green:
 At this point:
 
 - `develop` contains all Chapter 6 changes.
-- CI is now watching your backend with tests on every PR.
+- CI is now watching your backend with tests **and coverage** on every PR.
 - You’re ready to start the next chapter from a clean, green baseline.
 
 ---
 
-## 6.11 Summary & What’s Next
+## 6.12 Summary & What’s Next
 
 In this chapter, we:
 
@@ -572,14 +877,23 @@ In this chapter, we:
 - Added **unit tests** for:
   - `Result` / `Result<T>` success and failure.
   - `ValueObject` equality semantics (using a test `TestMoney` value object).
-  - Entity equality (optional, using `TestEntity`).
+  - Entity equality (using `TestEntity`).
 - Added the test project to `BankingSuite.Backend.sln`.
-- Updated CI to run `dotnet test` on the backend solution in every PR.
+- Wired up **coverage visualization locally**:
+  - `dotnet test` with Coverlet to produce `coverage.info`.
+  - Coverage Gutters to show inline coverage in VS Code.
+  - ReportGenerator + HTML Preview to view HTML coverage reports inside VS Code.
+- Extended CI to:
+  - Run backend tests with coverage.
+  - Generate HTML + text coverage reports.
+  - Upload coverage as an artifact.
+  - Attach a coverage summary to the GitHub Actions run.
 
 From now on:
 
-- Any change that breaks `Result`, `ValueObject`, or `Entity` will be caught immediately by tests and CI.
-- Future services (IAM, Customer, Account, Transaction) will build on top of a **tested foundation**.
+- Any change that breaks `Result`, `ValueObject`, or `Entity` will be caught by tests and CI.
+- You and your team can **see coverage** both locally and in GitHub.
+- Future services (IAM, Customer, Account, Transaction) will build on top of a **tested and observable foundation**.
 
 In the next chapter, we’ll start moving closer to the **real banking domain**:
 
@@ -587,5 +901,5 @@ In the next chapter, we’ll start moving closer to the **real banking domain**:
 - Use the building blocks and testing patterns we’ve created here.
 - Continue evolving CI, Docker, and our solution structure as we add real behavior.
 
-Your backend now has **both structure and tests**.  
-It’s no longer just “compiles”; it’s **actively protected** by a growing safety net of unit tests.
+Your backend now has **both structure and tests and coverage**.  
+It’s no longer just “compiles”; it’s **actively protected** and **measured**.
