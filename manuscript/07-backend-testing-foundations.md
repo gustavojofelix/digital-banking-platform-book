@@ -735,28 +735,47 @@ W> All of these steps should be placed **after** the “build backend solution�
 
 ## 6.10 Local Sanity Check Before Committing
 
-Before committing, run the whole flow locally:
+Before committing, run the whole flow locally using the **same commands** we expect CI (and you) to use regularly.
+
+From the **repo root**:
 
 ```bash
-cd digital-banking-suite/src/backend
+cd digital-banking-suite
 
-# Build solution
-dotnet build BankingSuite.Backend.sln --configuration Release
+# 1) Build the backend solution
+dotnet build src/backend/BankingSuite.Backend.sln --configuration Release
 
-# Run tests with coverage (same pattern as CI)
-dotnet test BankingSuite.Backend.sln \
+# 2) Run tests with coverage (writes lcov.info at repo root)
+dotnet test src/backend/BankingSuite.Backend.sln \
   /p:CollectCoverage=true \
-  /p:CoverletOutput=./coverage \
+  /p:CoverletOutput=../../../lcov \
   /p:CoverletOutputFormat=lcov
 
-# Generate HTML coverage report
+# 3) Generate HTML + text coverage report under src/backend/coverage-report
 reportgenerator \
-  -reports:coverage.info \
-  -targetdir:coverage-report \
-  -reporttypes:Html;TextSummary
+  -reports:lcov.info \
+  -targetdir:src/backend/coverage-report \
+  "-reporttypes:Html;TextSummary"
 ```
 
-If all commands succeed and you can open `coverage-report/index.html` locally, you’re ready to commit.
+After this completes successfully, you should have:
+
+```text
+digital-banking-suite/
+  lcov.info
+  src/backend/
+    coverage-report/
+      index.html
+      Summary.txt
+      ...
+```
+
+You can now:
+
+- Open `src/backend/coverage-report/index.html` in VS Code using the **HTML Preview** extension.
+- Use **Coverage Gutters** with `lcov.info` at the repo root to see inline coverage in the editor.
+
+If all commands succeed and tests pass, you’re ready to commit.
 
 ---
 
@@ -772,14 +791,14 @@ At this point you should have, on the branch
   - `Entity` equality (with `TestEntity`, optional but recommended)
 - `BuildingBlocks.UnitTests` added to `BankingSuite.Backend.sln`.
 - Local coverage visualization wired up:
-  - `dotnet test` with coverage → `TestResults/coverage.info`
-  - Coverage Gutters for inline coverage in VS Code
-  - ReportGenerator + HTML Preview for HTML reports inside VS Code
+  - `dotnet test` with Coverlet writing `lcov.info` at the **repo root**.
+  - Coverage Gutters for inline coverage in VS Code.
+  - ReportGenerator + HTML Preview for HTML reports under `src/backend/coverage-report`.
 - CI updated to:
-  - Run tests with coverage
-  - Generate HTML and text summary via ReportGenerator
-  - Upload the coverage report as an artifact
-  - Append a coverage summary to the run summary
+  - Run backend tests with coverage using the same `../../../lcov` pattern.
+  - Generate HTML + text coverage reports into `src/backend/coverage-report`.
+  - Upload the coverage report as a **GitHub Actions artifact**.
+  - Attach a coverage summary to the GitHub Actions run summary.
 - This chapter’s markdown (if you keep docs in the repo).
 
 Now we finish the Git workflow for the chapter.
@@ -789,23 +808,25 @@ Now we finish the Git workflow for the chapter.
 Stage and commit your work in logical chunks. For example:
 
 ```bash
+# Backend tests for building blocks
 git add src/backend/BuildingBlocks.UnitTests/*
 git add src/backend/BuildingBlocks.UnitTests/BuildingBlocks.UnitTests.csproj
 git commit -m "test(building-blocks): add unit tests for Result, ValueObject and Entity"
 
-git add src/backend/TestResults/.gitkeep || true
+# CI pipeline updates (tests + coverage + report)
 git add .github/workflows/ci.yml
 git commit -m "chore(ci): run backend tests with coverage and publish report"
 
-git add src/backend/.gitignore || true
+# Git ignore updates (if you added coverage-related patterns)
 git add .gitignore
-git commit -m "chore(gitignore): ignore coverage and TestResults artifacts"
+git commit -m "chore(gitignore): ignore coverage artifacts and reports"
 
+# Documentation for this chapter
 git add docs/07-backend-testing-foundations.md
 git commit -m "docs(ch06): document backend testing and coverage visualization"
 ```
 
-T> As always, keep commits **focused and descriptive**. It makes PR review and future archaeology much easier.
+T> Do **not** add `lcov.info` or `src/backend/coverage-report/` to Git. They should be ignored as generated artifacts.
 
 ### 6.11.2 Pushing and Opening a Pull Request
 
@@ -826,18 +847,18 @@ Then, in GitHub:
    - Unit tests for `Result`, `ValueObject`, and `Entity`
    - Local coverage visualization (Coverage Gutters + HTML Preview)
    - CI coverage report + artifact + summary
-
-![alt text](image-3.png)
+   - Chapter 6 documentation
 
 ### 6.11.3 Watching the CI Pipeline
 
 When you open the PR, the CI workflow should:
 
 - Restore all backend projects.
-- Build `BankingSuite.Backend.sln`.
-- Run `dotnet test` with coverage.
-- Generate coverage reports and summary.
+- Build `src/backend/BankingSuite.Backend.sln`.
+- Run `dotnet test` with coverage (producing `lcov.info` at the repo root).
+- Generate coverage reports into `src/backend/coverage-report`.
 - Upload a `backend-coverage-report` artifact.
+- Append the coverage summary to the run summary.
 
 If any test fails, or coverage generation fails, the pipeline will be red. Fix the issue locally, push again, and wait for CI to turn green.
 
