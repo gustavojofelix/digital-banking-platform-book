@@ -6,3 +6,4 @@
 05-docker-from-day-zero.md
 06-backend-solution-structure.md
 07-backend-testing-foundations.md
+08-final-backend-structure-and-iam-service.md
