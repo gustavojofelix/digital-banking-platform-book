@@ -1,308 +1,275 @@
 # Introduction
 
-Most software books either stay too high-level (“here are some principles”) or dive straight into code without showing how everything fits together in a real system.
+Software changes fast. Banking changes slowly.
 
-Most tutorials stop at **“here’s a CRUD API”**.
+This tension makes digital banking one of the best domains to learn **architecture**, **testing**, and **DevOps** that can survive more than one framework release.
 
-Very few books walk you through **designing and building an entire platform** — from architecture and domain modeling, all the way to CI/CD, observability, and production readiness.
+This book invites you to build a **real digital banking platform**—not a demo, not a todo list, but a small version of what an actual bank could run in 2026:
 
-This book exists to fill that gap.
+- Multiple **microservices** with clear bounded contexts
+- A modern **Angular 21** frontend in an **Nx monorepo**
+- A hardened **IAM service** with login, roles, 2FA and lockouts
+- **Docker**, **CI/CD**, **tests and coverage** from day one
 
-Here, you are not just reading _about_ architecture.  
-You are **building a modern digital banking platform**, step by step, using industry standards and production-focused practices from day one.
-
-This introduction explains:
-
-- Why this book exists
-- Who this book is for
-- What you will build
-- What you need before starting
-- How the book is structured
-- How to use this book and work with the code
-- What is in scope (and what isn’t)
+You’ll use the latest tools: **.NET 10, C# 14, Visual Studio 2026, Angular 21, Nx and GitHub Actions**.  
+But more importantly, you’ll learn patterns you can carry into any modern backend system.
 
 ---
 
-## Why This Book Exists
+## The core idea: learn by building a bank
 
-There are countless tutorials that show how to build a simple CRUD API. There are far fewer that show how to architect an entire system — from requirements to production — using real-world patterns and tooling.
+Instead of teaching patterns in isolation, we’ll grow a single system called **Alvor Bank – Banking Suite**.
 
-The **Banking Suite** we’re building in this book is not a toy project.
+You will:
 
-It is a **modular, scalable, cloud-ready platform** composed of multiple microservices and frontends, each demonstrating advanced concepts such as:
+- Design the **domain** and map it to bounded contexts.
+- Implement those contexts as separate **microservices** with Clean Architecture and DDD.
+- Expose them through **HTTP APIs** and an **API gateway**.
+- Authenticate and authorize everyone through a dedicated **IAM service**.
+- Build a **back-office portal** for bank staff and a **customer portal** for end users.
+- Run everything locally with **Docker** and ship it through **CI/CD pipelines**.
 
-- Domain-Driven Design (DDD)
-- Clean Architecture
-- Minimal APIs and .NET 9
-- Messaging patterns (event-driven architecture)
-- Containerization with Docker
-- CI/CD pipelines with GitHub Actions
-- Automated testing strategies
-- Observability and logging
-- Security & Identity
-- API Gateway and service discovery
-- DevOps-friendly project layout
+Most importantly, you’ll always see how backend and frontend come together:
 
-Instead of showing you isolated examples, this book shows how all of these come together in a **single cohesive system**: a digital banking platform you could proudly put into a portfolio or evolve into a real product.
+> For each major bounded context (IAM, Customers, Accounts, Transactions), we’ll build the **backend first**, then **immediately wire the Angular UI** so you can see the feature working end-to-end.
+
+By the end, you’ll have a working platform and, more importantly, the confidence to build similar systems in your own career.
 
 ---
 
-## Who This Book Is For
+## The tech stack at a glance
 
-This book is written for people who build or want to build real systems for a living:
+We’ll use a modern stack that matches what many teams will be running in 2026 and beyond:
 
-- **Backend developers** who want to go beyond CRUD and design robust services and domains.
-- **Full-stack developers** who want to understand how frontend, backend, and DevOps fit together end-to-end.
-- **Senior developers & tech leads** preparing for architecture, leadership, or system design roles.
-- **Ambitious junior/mid developers** who want a fast track into real-world architecture and design.
-- **Software architects** looking for practical, modern microservice patterns in the context of banking/fintech.
+- **Backend**
 
-You do **not** need to be an expert in banking. You just need:
+  - .NET 10, C# 14
+  - ASP.NET Core with FastEndpoints (or minimal-API style)
+  - EF Core 10 + PostgreSQL
+  - ASP.NET Core Identity, JWT, role-based auth, 2FA
+  - Docker & docker compose
 
-- Solid C#/.NET fundamentals
-- Basic understanding of REST APIs and HTTP
-- Some familiarity with SQL databases
-- Willingness to build something real and non-trivial
+- **Frontend**
 
-We’ll introduce banking concepts gradually, in context, as we build.
+  - Angular 21
+  - Nx monorepo (apps + shared libs)
+  - Typed API clients, feature modules, shared UI components
 
----
+- **DevOps & Tooling**
+  - Visual Studio 2026 (or latest Visual Studio) & VS Code
+  - Git & GitHub
+  - GitHub Actions for CI/CD
+  - Postman collections & Newman for API testing
+  - Code coverage with Coverlet and ReportGenerator
 
-## What You Will Build
-
-Throughout this book, you will build a **cloud-ready Digital Banking Suite** — a simplified but realistic digital banking platform.
-
-At a high level, the system includes:
-
-- **Customer onboarding and profiles**
-- **Account creation and lifecycle** (open, active, closed, etc.)
-- **Core transactions** (deposits, withdrawals, transfers)
-- **Authentication & Authorization (IAM)** with roles and multi-tenant awareness
-- **Notifications** for critical events (e.g., deposit received, transfer completed)
-- **A web banking portal and a basic admin/backoffice UI** built with Angular
-
-The backend is built as a set of microservices, such as:
-
-- **IAM Service** — identity, login, authentication, authorization
-- **Account Service** — customer bank accounts, account types, balances, and account lifecycle
-- **Transaction Service** — internal ledger, payments, and money movements
-- **Notification Service** — email/SMS and integration with external notification providers
-- **API Gateway** — YARP-based gateway as the single entry point
-- **Shared libraries** — reusable contracts, abstractions, and utilities
-- **CI/CD pipeline** — build → test → lint → scan → package
-
-Each microservice is designed using **Clean Architecture** and prepared for **production readiness**, not just local demos.
+We’ll keep the versions current at the time of writing (for example, **.NET 10.x**, **Angular 21.x**). When you read this, use the latest compatible minor versions.
 
 ---
 
-## What You Will Need
+## The microservices you’ll build
 
-### Skills
+The Banking Suite will be composed of several services:
 
-To get the most out of this book, you should be comfortable with:
+- **IAM Service** – Identity & Access Management for staff and customers:  
+  Login, roles, permissions, JWT tokens, account lockouts, password reset, email confirmation, and two-factor authentication.
 
-- **C# and .NET** basics (classes, interfaces, dependency injection, async/await)
-- **HTTP and REST APIs** (endpoints, JSON, status codes)
-- **Basic relational databases** (tables, queries, primary keys)
-- **Fundamental Git usage** (clone, commit, branch, merge, push, pull)
+- **Customer Service** – Customer onboarding and KYC:  
+  Customer profiles, documents, verification status, and basic lifecycle.
 
-You don’t need to be an expert in everything; you can learn a lot along the way. But having these fundamentals will make the journey much smoother.
+- **Account Service** – Accounts and balances:  
+  Current and savings accounts, ownership, simple invariants (no negative balances unless explicitly allowed), basic account lifecycle.
 
-### Tools
+- **Transaction Service** – Money moving between accounts:  
+  Posting transactions, transfers, simple statements and audit-friendly history.
 
-You should have:
+- **API Gateway** – A thin layer that exposes a single entry point to all backend services.
 
-- **.NET 9 SDK**
-- **Node.js (LTS)**
-- **Angular CLI**
-- **Nx** (for monorepo / workspace management)
-- **Docker Desktop or Docker Engine**
-- **Git**
-- A code editor like **VS Code**, **Rider**, or **Visual Studio**
+- **Angular 21 Frontend (Nx monorepo)** – Two primary experiences:
+  - A **back-office portal** for Alvor Bank employees.
+  - A **customer portal** for retail users.
 
-We’ll use these tools throughout the book, and installation steps are covered where relevant.
+Each service follows the same Clean Architecture pattern:
+
+- **Domain** – Entities, value objects, aggregates, domain services, events
+- **Application** – Use cases expressed as CQRS commands and queries
+- **Infrastructure** – EF Core, Identity, messaging, external integrations
+- **API** – HTTP endpoints, auth, request/response mapping
+
+And for each bounded context, we’ll **pair the backend with its frontend**:
+
+- Build IAM backend → build IAM login & admin UI.
+- Build Customer Service backend → build customer onboarding & management UI.
+- Build Account & Transaction services → build account overview, transaction history and simple transfer flows.
 
 ---
 
-## How This Book Is Structured
+## Repositories and how to follow along
 
-The book is organized to mirror how you might approach a real-world project, moving from **vision and design** to **implementation and operations**.
+To keep things organised, we’ll use **separate repositories**:
+
+1. **Book repository** – Contains the manuscript, diagrams and assets for this book (the Markdown you’re reading now).
+
+2. **Main source code repository** – Contains the full **Alvor Bank – Banking Suite** solution as it evolves, for example:
+
+   - `digital-banking-suite/`
+     - `src/backend/` – IAM, Customer, Account, Transaction and related services
+     - `src/frontend/` – Angular 21 + Nx apps and libs
+     - `infra/` – Docker compose and infrastructure scripts
+     - `tests/` – Unit, integration and API test projects
+     - `postman/` – Postman collections and environments
+
+3. **Chapter snapshots** – Instead of dozens of long-lived branches, we’ll use **Git tags** (or a lightweight “chapter snapshots” repo) so you can check out the exact state of the code after each chapter, for example:
+
+   - `chapter-01-vision`
+   - `chapter-03-dev-environment`
+   - `chapter-07-iam-backend`
+   - `chapter-08-iam-frontend`
+   - `chapter-10-customer-service`
+   - etc.
+
+In the book, when you see folder structures or commands, assume they refer to the **main source code repo**. When you want to compare your progress, you can fetch the corresponding tag and inspect how things look at that point.
+
+---
+
+## How the chapters are organised
+
+This book is divided into several parts that mirror how you might run a real project.  
+From Part III onward we deliberately **pair back-end and front-end work** for each microservice.
 
 ### Part I — Understanding & Designing Modern Digital Banking Systems
 
-You’re here now. Part I lays the **conceptual and structural foundation**:
+We start with **concepts and design**:
 
-- The vision and goals of the Banking Suite
-- The domain architecture and bounded contexts (Accounts, Customers, Transactions, IAM)
-- Event-driven thinking and high-level workflows
-- System context and container-level architecture
-- Development environment, repository layout, and branch strategy
+- Why microservices for a bank?
+- What are the core bounded contexts?
+- What does a basic banking workflow look like?
+- How do we set up a clean development environment and branching strategy?
 
-By the end of Part I, you’ll know **exactly what you’re building** and **how everything fits together**.
+You’ll define the vision for Alvor Bank, sketch the domain, and prepare your environment (tooling, repos, branches).
 
-### Part II — Implementing the Banking Backend
+### Part II — Foundations: Environment, Containers, Testing & CI/CD
 
-We build the backend microservices with **.NET 9, Clean Architecture, and DDD**:
+Before we dive into individual services, we set the **foundation**:
 
-- Designing aggregates and domain models in banking contexts
-- Implementing Account, Customer, and Transaction services
-- Persisting data with PostgreSQL
-- Implementing domain and integration events with RabbitMQ
+- Install and verify **.NET 10, Angular 21, Nx, Visual Studio 2026**.
+- Create the main repo and branch strategy.
+- Introduce **Docker** and **docker compose** for local infrastructure.
+- Define a **testing strategy**: unit, integration, API tests.
+- Set up a **CI pipeline** (GitHub Actions) that builds, tests and reports coverage.
+- Introduce shared **BuildingBlocks** and the common microservice template.
 
-### Part III — Frontend & User Experience
+By the end of Part II you’ll have a stable skeleton: a repeatable backend structure and a working CI pipeline.
 
-We build the **Angular + Nx** frontend:
+### Part III — IAM Service: Secure Access End-to-End
 
-- Customer-facing web banking portal
-- Basic admin/backoffice interface
-- Integrating authentication and backend APIs
-- Aligning UX with the underlying domain flows
+Here we build **Identity & Access Management**, including its UI:
 
-### Part IV — DevOps, Observability & Hardening
+- Finalise the backend microservice structure with **IAM** as the template.
+- Implement IAM Domain, Application, Infrastructure and API (login, roles, 2FA, lockouts).
+- Add **Postman collections** and tests for IAM.
+- Set up the **Angular 21 + Nx workspace**.
+- Build the **IAM front-end pieces**: login page, JWT handling, role-based navigation, basic admin screens for managing users.
 
-We close the loop by treating the system like a real product:
+By the end of Part III you’ll have a working login flow end-to-end, with tokens issued by IAM and consumed by the Angular app.
 
-- Dockerizing services and composing local environments
-- Setting up CI pipelines using GitHub Actions
-- Adding logging and basic observability
-- Discussing production concerns: security, resilience, and evolution
+### Part IV — Customer Onboarding & Management (Backend + UI)
 
-The exact details may evolve, but the core intention remains: **architecture + implementation + operations** in one unified journey.
+Next we focus on **Customers**:
 
----
+- Design and implement the **Customer Service** backend: entities, onboarding flows, KYC data, customer status.
+- Expose customer APIs through the gateway and secure them with IAM roles.
+- Build the **customer management UI** in Angular:
+  - Back-office screens for creating and reviewing customers.
+  - A first version of a **customer self-service onboarding** flow.
 
-## How to Use This Book
+Again, we close the loop by pairing backend and UI before moving on.
 
-This is not a “read-only” book. It is meant to be **coded along**.
+### Part V — Accounts & Transactions (Backend + UI)
 
-Each chapter builds a tangible piece of the system. For each major feature, we will usually:
+Now we model **money and movement**:
 
-1. Explain the **domain and architectural decision**
-2. Design the **API, models, and boundaries**
-3. Implement the **code**
-4. Add **tests**
-5. Integrate with **infrastructure** (database, messaging, etc.)
-6. Wire things into **Docker and CI/CD**
+- Implement **Account Service**: accounts, balances, simple invariants and lifecycle.
+- Implement **Transaction Service**: posting transactions, basic transfers and history.
+- Create **Angular views** for:
+  - Account overview and details.
+  - Transaction history.
+  - A simple “make a transfer” flow that uses the Transaction Service.
 
-There are two recommended ways to use the book:
+By the end of Part V, a customer can log in, see their accounts and perform simple operations through the web UI.
 
-### Read-Then-Build
+### Part VI — DevOps & Hardening
 
-You read a chapter to understand the concept and architecture first, then revisit it with your editor open to implement the code.
+Finally we focus on **operational excellence**:
 
-This is ideal if:
+- Polish Docker images and compose files.
+- Enhance CI/CD pipelines to build and push images, run tests and enforce coverage.
+- Add logging, health checks and simple monitoring.
+- Discuss basic hardening: secrets, configuration, minimal surface area.
+- Explore options for deploying to cloud platforms or Kubernetes.
 
-- You like absorbing the “why” before typing the “how”
-- You’re reading on a tablet or away from your dev machine
-
-### Build-As-You-Go
-
-You read with your IDE open and:
-
-- Create projects, folders, and files as you go
-- Implement code step-by-step
-- Run services and tests locally
-- Commit your changes after each major step
-
-This is the most demanding but also the most rewarding path. By the end, you’ll have more than notes — you’ll have a working Banking Suite.
+By the end of Part VI, you will have travelled from blank repo to a **deployable, testable, observable digital banking suite**.
 
 ---
 
-## Working With the Codebase
+## How to work through this book
 
-The book assumes you have (or will create) a Git repository that mirrors the structure described in the chapters.
+You can approach this book in different ways:
 
-You are encouraged to:
+- **End-to-end builder**  
+  Follow chapters in order, building everything as you go. This is the most immersive path and the one recommended if you want the full experience.
 
-- Organize your repository as a **monorepo** (e.g., using Nx) for backend + frontend + shared libraries
-- Use a **branching strategy** like:
-  - `main` — stable, release-ready
-  - `develop` — integration of ongoing work
-  - `feature/<chapter-or-feature>` — per-feature or per-chapter work
-- Commit frequently at natural checkpoints:
-  - End of each chapter
-  - End of a major feature or refactor
+- **Backend-first**  
+  When we reach a paired backend + frontend section (for example, IAM), you can focus on the backend chapters first, then come back to the UI chapters later. The snapshot tags make it easy to pick up where you left off.
 
-If you’re working in a team, treating this as a real project (code reviews, PRs, branches) will turn the book into a hands-on training ground for your architecture practices.
+- **Frontend-focused**  
+  Read just enough of Parts I–II to understand the APIs and domain, then follow each microservice’s UI chapter to see how Angular 21 + Nx consume those APIs.
 
----
+Whichever path you choose, treat the code as if it were your **day job**:
 
-## Conventions Used in This Book
-
-To keep examples readable and consistent, we’ll follow some simple conventions.
-
-### Code Samples
-
-C# / .NET:
-
-```csharp
-public class Account
-{
-    public Guid Id { get; private set; }
-    public decimal Balance { get; private set; }
-
-    public void Deposit(decimal amount)
-    {
-        // ...
-    }
-}
-```
-
-### Shell Commands
-
-```bash
-    dotnet new webapi -n AccountService
-    docker compose up -d
-```
-
-### Configuration / JSON
-
-```json
-{
-  "ConnectionStrings": {
-    "Default": "Host=localhost;Database=banking;Username=postgres;Password=postgres"
-  }
-}
-```
-
-We will also use simple textual callouts like:
-
-I> **Note:** Important context, clarifications, or side information.
-
-W> **Warning:** Something that can break your setup or cause confusion.
-
-T> **Tip:** A shortcut, improvement, or best practice
+- Create branches.
+- Keep tests green.
+- Run Docker regularly.
+- Use `git diff` and tags to understand how the system evolves.
 
 ---
 
-## Reality & Scope
+## What you need before starting
 
-This is **not** a full core banking system like those used by large international banks in production — that would take hundreds of people and several years.
+You don’t need to be an expert in everything, but these basics will make your journey smoother:
 
-Instead, this is a **carefully scoped, realistic digital banking platform** that captures the essential patterns, trade-offs, and constraints you will face in real-world financial or fintech systems:
+- Comfortable reading and writing **C#**
+- Basic understanding of **HTTP and REST APIs**
+- Some experience with **JavaScript/TypeScript** (for the Angular parts)
+- Familiarity with **Git** and basic branching
+- Willingness to open a terminal and run some commands
 
-- Clear domains and bounded contexts
-- Realistic entities (customers, accounts, transactions)
-- Awareness of regulatory and security concerns at a conceptual level
-- An infrastructure and workflow that looks like what real teams use today
-
-The goal is not to model every regulation or edge case, but to give you a **reusable blueprint and mindset** you can apply to serious systems.
+If you don’t know Angular well, that’s fine—you’ll pick up a lot by building the specific screens and flows we need for the banking suite.
 
 ---
 
-## Ready to Start
+## A note on versions and real-world use
 
-You now know:
+The examples in this book target:
 
-- Why this book exists
-- Who it is for
-- What you will build
-- What you need installed and prepared
-- How the book is structured
-- How to approach the journey and work with the code
+- **.NET 10** and **C# 14**
+- **Angular 21**
+- **Visual Studio 2026** (or the latest VS / VS Code)
+- **EF Core 10**, **PostgreSQL**, **Docker**, **GitHub Actions**
 
-In **Part I**, we lay the foundations.
+In real projects, you might use slightly different versions, different CI servers, or other cloud providers. That’s fine.
 
-In **Chapter 1**, we start with the vision for the Banking Suite and the high-level architecture that will guide every decision that follows.
+The goal is that, after working through these chapters, you’ll understand **why** the system is structured this way and be able to adapt the ideas to your own stack and constraints.
 
-Let’s build.
+---
+
+## Let’s begin
+
+In the next chapter, we’ll set the vision for Alvor Bank:
+
+- What are we building?
+- Who are the users?
+- What capabilities does a modern digital bank need?
+
+From there, we’ll design the domain and gradually turn that vision into code—pairing backend and frontend for each microservice so you always see the full story.
+
+Let’s build a real digital bank.

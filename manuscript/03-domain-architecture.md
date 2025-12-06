@@ -1,367 +1,539 @@
-# Chapter 2 — Domain Architecture of a Digital Bank
+# Chapter 02 — Domain Architecture of a Digital Bank
 
-In Chapter 1, we defined the **vision** for the Banking Suite and saw the high-level architecture: frontend, API gateway, microservices, messaging, and databases.
+In Chapter 01 we set the vision for **Alvor Bank – Banking Suite**.  
+Now we turn that vision into a **domain architecture**: bounded contexts, services, messaging and key workflows.
 
-In this chapter, we zoom in on the **domain itself**:
+By the end of this chapter, you should be able to:
 
-- How to slice the system into **bounded contexts**
-- How those contexts collaborate using **events and APIs**
-- The difference between **domain models** and **integration models**
-- The key **business workflows** that drive the design
-- How everything fits into a **system and container view**
+- Name the **main bounded contexts** of the system and what each is responsible for.
+- Explain which microservice **owns which data** and which rules.
+- Understand how **RabbitMQ + MassTransit** fit into the picture as the event backbone.
+- Visualise the system using **C4-style context and container diagrams** (described in text here, with actual diagrams added later).
+- See how back-office and customer UI flows map to backend services.
 
-By the end of this chapter, you’ll have a clear mental model of the domains that shape the code you’ll write later.
-
----
-
-## 2.1 From Business Capabilities to Bounded Contexts
-
-Before thinking about projects, folders, or databases, we start with **business capabilities**:
-
-- Onboard a new customer
-- Open and manage bank accounts
-- Move money (deposits, withdrawals, transfers)
-- Authenticate users and control what they can do
-- Notify customers about important events
-
-These capabilities naturally group into **bounded contexts**. A bounded context is a part of the system where:
-
-- A **specific domain language** is used consistently
-- A **domain model** makes sense and is internally coherent
-- The **rules** are clear and locally owned
-
-For the Banking Suite, our main bounded contexts are:
-
-- **IAM (Identity & Access Management)**
-- **Customers**
-- **Accounts**
-- **Transactions**
-- **Notifications**
-
-We treat each bounded context as a **separate microservice** in the implementation, but the concept is architectural first, technical second.
+We still won’t write code yet; this chapter is all about **structure and language**.
 
 ---
 
-## 2.2 Bounded Context: IAM
+## 2.1 Why domain architecture first?
 
-The **IAM context** is responsible for:
+Before we open Visual Studio or run `ng new`, we need clarity on:
 
-- User registration and login
-- Password management and security policies
-- Roles and permissions (customer, admin, operator)
-- (Optionally) Tenants / organizations if you run the platform as SaaS
+- What are the **core concepts** in our bank?
+- How do we **slice responsibilities** into services?
+- Which service **owns** which data?
+- How do services **talk to each other** (HTTP vs events)?
 
-Inside the IAM context:
+Getting this wrong leads to:
 
-- A **User** is someone who can log in and act in the system.
-- A **Role** defines what users can do (e.g., `Customer`, `BankAdmin`).
-- **Permissions** or policies may define more granular access rules.
+- Services that know too much about each other.
+- “God services” that own _everything_.
+- Painful refactors once you start adding features.
 
-Importantly:
+Getting this **good enough** up front gives us:
 
-- IAM **does not own** customer profile data (addresses, phone numbers, etc.).
-- IAM **does not know** about accounts, balances, or transactions.
-- It only knows **who** someone is (from an auth point of view) and **what they can do**.
-
-When another context needs to know “who is this user?”, it interacts with IAM via:
-
-- **Tokens and claims** (e.g., JWT) for authentication
-- Optionally, **read-only APIs** for querying identity-related information
+- Clear **bounded contexts** with well-defined responsibilities.
+- A consistent way to grow the platform as new requirements appear.
+- A mental model that you (and future teammates) can actually hold in your head.
 
 ---
 
-## 2.3 Bounded Context: Customers
+## 2.2 The core domains revisited
 
-The **Customer context** represents the bank’s relationship with individuals or businesses.
+From Chapter 01, we identified these main functional areas:
 
-Responsibilities:
+- **IAM** – who you are and what you are allowed to do.
+- **Customer** – who the bank’s customers are from a KYC and profile point of view.
+- **Accounts** – where money “sits”.
+- **Transactions & Payments** – how money moves and how everyday payments are initiated.
+- **Notifications** (supporting) – how we inform users about important events.
+- **API Gateway** (supporting) – how external clients talk to the system.
 
-- Store customer profiles (name, email, phone, address)
-- Associate customers with IAM users, where relevant
-- Track basic KYC-style information (very simplified for this book)
-- Provide customer information to other contexts (e.g., Accounts, Notifications)
+We’ll model each of these as a **bounded context** with its own domain model and its own microservice.
 
-In this context:
-
-- A **Customer** is a person or organization that owns one or more **Accounts**.
-- A **CustomerId** is the primary identifier shared with other contexts.
-
-The Customer context doesn’t:
-
-- Handle login — that’s IAM.
-- Manage accounts or balances — that’s Accounts.
-- Record money movement — that’s Transactions.
-
-It is purely **who** the bank serves.
+Later chapters will add more details and diagrams, but right now we need a **high-level cut**.
 
 ---
 
-## 2.4 Bounded Context: Accounts
+## 2.3 Bounded contexts and microservices
 
-The **Accounts context** models how money is stored and labeled for a customer.
+At the highest level, Alvor Bank will have the following backend services:
 
-Responsibilities:
+- `IamService`
+- `CustomerService`
+- `AccountService`
+- `TransactionService`
+- `NotificationService`
+- `ApiGateway` (YARP or similar reverse proxy)
 
-- Create and manage bank accounts
-- Enforce account lifecycle: `Opened → Active → Frozen → Closed`
-- Manage account types: current/checking, savings, etc.
-- Maintain **derived balances** based on transactions
-- Enforce simple account-level rules (e.g., block transactions on frozen accounts)
+And two primary frontends:
 
-Key concepts:
+- **Back-office Angular app** (for staff)
+- **Customer Angular app** (for end users)
 
-- **Account** — belongs to a **Customer**, has an account number and type.
-- **AccountStatus** — indicates whether the account is usable.
-- **Balance** — often derived from Transactions, but cached in Accounts for performance.
+Each service owns its **own database** and follows the same **Clean Architecture** pattern (Domain, Application, Infrastructure, API). Let’s look at each context in more detail.
 
-The Accounts context is tightly linked to Transactions but has its own rules:
+### 2.3.1 IAM context
 
-- You may **not** be allowed to perform certain transactions depending on account status.
-- Some actions (like opening or closing an account) emit **domain events**.
+**Responsibility**
 
----
+Everything related to _identity_ and _access_:
 
-## 2.5 Bounded Context: Transactions
+- Users (staff + customers)
+- Credentials (passwords, 2FA secrets)
+- Roles and permissions
+- Security policies (lockouts, password rules)
+- Tokens (JWT issuing and validation keys)
 
-The **Transactions context** is where actual **money movement** is recorded.
+**Owns**
 
-Responsibilities:
+- User accounts and security-critical fields
+- Roles and role assignments
+- Authentication flows and 2FA configuration
 
-- Record **debits and credits** to accounts.
-- Ensure that each transaction is **consistent and traceable**.
-- Support different transaction types:
-  - Deposit
-  - Withdrawal
-  - Transfer between internal accounts
-- Expose transaction history for a given account.
+**Does not own**
 
-Key concepts:
+- Customer KYC details
+- Account balances or transactions
 
-- **Transaction** — an atomic event that affects one or more accounts.
-- **Ledger** — the logical stream of transactions that defines balances.
-- **Reference / Correlation IDs** — used for reconciliation and idempotency.
+Other services ask IAM:
 
-The Transactions context does not:
+- “Who is this user?”
+- “What roles/permissions do they have?”
 
-- Decide who is allowed to perform an action — that’s IAM + Accounts.
-- Handle notifications — that’s the Notifications context.
-- Own customer information — that’s Customers.
-
-It just answers: **“What happened to the money, and when?”**
+IAM answers via JWT claims and (later) via introspection endpoints.
 
 ---
 
-## 2.6 Supporting Context: Notifications
+### 2.3.2 Customer context
 
-The **Notifications context** is not core to banking, but it is crucial to a good digital banking experience.
+**Responsibility**
 
-Responsibilities:
+The **business view of the customer**:
 
-- Receive events like `TransactionCompleted`, `AccountOpened`, `PasswordChanged`
-- Transform them into **human-friendly messages**
-- Send emails (and possibly SMS or push notifications in the future)
+- Customer profiles
+  - Personal details (name, contact info)
+  - KYC information (documents, verification status)
+- Onboarding workflows
+  - Creating a new customer
+  - Collecting required KYC data
+  - Tracking verification and risk flags
 
-The Notification context:
+**Owns**
 
-- Does not initiate business actions.
-- Reacts to what happens elsewhere.
-- Is naturally **event-driven**.
+- Customer entities and KYC attributes
+- Onboarding and verification state
 
-This context is a great example of how you can add features **without changing core services**, by subscribing to their events instead.
+**Does not own**
 
----
+- Login credentials (owned by IAM)
+- Account balances (owned by Accounts)
 
-## 2.7 Event-Driven Design in the Banking Suite
+Typical interactions:
 
-Event-driven design is a natural fit for banking. Many things that happen are **facts** about the past that other parts of the system care about:
-
-- An account was created.
-- A transaction was completed.
-- A password was reset.
-- A customer updated their contact email.
-
-We represent these as **events**:
-
-- `AccountOpened`
-- `TransactionCompleted`
-- `CustomerEmailUpdated`
-- `UserPasswordChanged`
-
-### Why Events?
-
-Events help us:
-
-- Decouple services: the Transactions service doesn’t need to know who listens to `TransactionCompleted`.
-- Scale independently: Notifications can scale based on event volume.
-- Add features without touching core flows (e.g., add analytics or reporting later).
-
-### A Simple Event Flow Example
-
-Consider a **deposit**:
-
-1. The frontend calls the **API Gateway**, which forwards to **Transaction Service**.
-2. Transaction Service:
-   - Validates the request
-   - Records a new `Transaction` in its ledger
-   - Publishes a `TransactionCompleted` event
-3. **Account Service** subscribes to the event and updates the account’s cached balance.
-4. **Notification Service** also subscribes and sends an email to the customer.
-
-Visually, you can represent this flow with a diagram such as:
-
-![Event-Driven Flow: Deposit → Event → Notification](event-flow.png)
+- Back-office agents create or update customers.
+- IAM may create a login for a verified customer.
+- CustomerService may publish events such as `CustomerOnboarded` or `CustomerVerified`.
 
 ---
 
-## 2.8 Domain Models vs Integration Models
+### 2.3.3 Accounts context
 
-One of the most common mistakes in microservice systems is to treat **API contracts** and **domain models** as if they were the same thing.
+**Responsibility**
 
-They are not.
+Where **money lives**:
 
-### Domain Model
+- Accounts: current, savings (and later: more types)
+- Ownership: which customer(s) own each account
+- Balances and basic invariants
+- Account lifecycle (opened, blocked, closed)
 
-- Lives inside a bounded context.
-- Encodes business rules and invariants.
-- Can be rich and behavior-focused (methods, invariants, domain events).
-- Can evolve **independently**, as long as its public interfaces remain consistent.
+**Owns**
 
-Example (simplified):
+- Account entities, account numbers and currency
+- Current/available balances
 
-```csharp
-public class Account
-{
-    public Guid Id { get; private set; }
-    public Guid CustomerId { get; private set; }
-    public decimal Balance { get; private set; }
-    public AccountStatus Status { get; private set; }
+**Does not own**
 
-    public void ApplyCredit(decimal amount)
-    {
-        // business rules, validations, domain events...
-    }
+- Detailed transaction history (primarily TransactionService)
+- Customer personal details (CustomerService)
 
-    public void ApplyDebit(decimal amount)
-    {
-        // business rules, overdraft rules, etc...
-    }
-}
+Typical interactions:
+
+- Back-office staff open accounts for customers.
+- The TransactionService calls Accounts to validate that an account is usable for a transaction.
+- Accounts may publish events such as `AccountOpened` or `AccountClosed`.
+
+---
+
+### 2.3.4 Transactions & Payments context
+
+**Responsibility**
+
+Where **money moves**:
+
+- Posting internal transactions between accounts
+- Maintaining a **transaction history** per account
+- Enforcing basic accounting rules (sum of debits = sum of credits)
+- Initiating **everyday digital banking operations**:
+  - Buying **electricity tokens**
+  - Buying **prepaid airtime/data**
+  - Paying **insurance premiums** and other simple bills
+- Emitting **domain events** such as:
+  - `TransactionPosted`
+  - `PaymentInitiated`
+  - `PaymentCompleted`
+  - `PaymentFailed`
+
+These events will be published to **RabbitMQ** using **MassTransit** so that other services (like Notifications or Reporting) can react asynchronously.
+
+**Owns**
+
+- Transaction records and payment instructions
+- Business rules around how and when we can post transactions
+
+**Does not own**
+
+- Account master data (AccountService)
+- Customer identity (CustomerService / IAM)
+
+---
+
+### 2.3.5 Notifications context (supporting)
+
+**Responsibility**
+
+Turning **technical events** into **human-readable messages**:
+
+- Listening for events like `CustomerOnboarded`, `AccountOpened`, `PaymentCompleted`, `LoginFromNewDevice`
+- Sending notifications via:
+  - Email
+  - SMS
+  - Push (or a simplified variant)
+
+**Owns**
+
+- Notification templates and (optionally) notification preferences
+- Notification history (if we choose to store it)
+
+**Does not own**
+
+- Business rules for IAM, Customers, Accounts, or Transactions
+
+Notifications is a **pure consumer** of events:
+
+- It subscribes to RabbitMQ topics via **MassTransit**, formats messages, and sends them via external providers.
+
+---
+
+### 2.3.6 API Gateway and frontends (supporting)
+
+The **API Gateway**:
+
+- Acts as a single entry point for the Angular frontends and Postman collections.
+- Routes requests to the correct microservice (IAM, Customers, Accounts, Transactions).
+- Can apply cross-cutting concerns (e.g., global logging, correlation IDs).
+
+The **Angular frontends**:
+
+- Call the gateway instead of talking directly to each service.
+- Use JWT tokens from IAM for authentication and role-based routing.
+- Present flows that span multiple services (for example, “Customer onboarding” uses IAM + CustomerService).
+
+---
+
+## 2.4 Ubiquitous language
+
+A key DDD concept is the **ubiquitous language**: shared terms we use consistently in code, docs and discussions.
+
+Here are some important terms we’ll use:
+
+| Term              | Meaning                                                                                | Owned by            |
+| ----------------- | -------------------------------------------------------------------------------------- | ------------------- |
+| User              | A person with login credentials (staff or customer)                                    | IAM                 |
+| Customer          | A bank customer with KYC details and relationship to the bank                          | CustomerService     |
+| Account           | A bank account (current, savings, etc.) with a number and balance                      | AccountService      |
+| Transaction       | A posting that moves value between accounts (debit/credit entries)                     | TransactionService  |
+| Payment           | A business operation that may result in one or more transactions (e.g. airtime top-up) | TransactionService  |
+| Electricity Token | A prepaid electricity voucher purchased via the bank                                   | TransactionService  |
+| Airtime Top-up    | A prepaid airtime/data purchase                                                        | TransactionService  |
+| Insurance Premium | A recurring or one-off payment to an insurance provider                                | TransactionService  |
+| Event             | A message emitted after something important happens (e.g. `AccountOpened`)             | Emitting context    |
+| Notification      | A user-facing email/SMS/push triggered by one or more events                           | NotificationService |
+
+We’ll reinforce this language in **entity names, DTOs, events and UI labels**.
+
+---
+
+## 2.5 C4-style view of the system
+
+We’ll use a simplified **C4 model** to describe the architecture:
+
+- **Level 1 – System Context:** Who uses the system and what else it talks to.
+- **Level 2 – Containers:** The major deployable pieces (services, frontends, databases, message broker).
+
+Later in the book we’ll generate diagrams as PNG/SVG. For now, we describe them in text and with simple ASCII layouts.
+
+### 2.5.1 System context
+
+At the system context level, we have:
+
+- **Actors**
+
+  - **Bank Employee** – uses the back-office portal to manage customers, accounts and payments.
+  - **Customer** – uses the customer portal to see balances and perform operations (tokens, airtime, insurance, transfers).
+
+- **Alvor Bank – Banking Suite (System)**
+
+  - Provides secure access for both actors.
+  - Manages accounts, transactions, payments and notifications.
+
+- **External systems**
+  - **Email/SMS Provider** – used by NotificationService.
+  - **Utility Provider API** – used for electricity tokens.
+  - **Airtime Aggregator** – used for airtime/data top-ups.
+  - **Insurance Provider API** – used for premium payments.
+
+You can imagine the diagram as:
+
+```text
+Bank Employee  --->  Back-Office Portal  --->  Alvor Bank – Banking Suite  --->  Email/SMS Provider
+Customer       --->  Customer Portal     --->                              --->  Utility / Airtime / Insurance APIs
 ```
 
-### Integration Model (DTO / Contract)
+![alt text](image-4.png)
 
-- Represents how data is sent over the wire between services or to the frontend.
-- Needs to be **versioned carefully**, because other systems depend on it.
-- Often flatter and more explicit than domain models.
+### 2.5.2 Container view
 
-Example:
+At the container level, we zoom into the system and see services and infrastructure:
 
-```csharp
-public sealed class AccountDto
-{
-    public Guid Id { get; init; }
-    public string AccountNumber { get; init; } = default!;
-    public string Type { get; init; } = default!;
-    public string Status { get; init; } = default!;
-    public decimal Balance { get; init; }
-}
+```text
++-------------------------+      +----------------------------+
+| Back-Office Angular App |      | Customer Angular App       |
++-----------+-------------+      +-------------+--------------+
+            |                                   |
+            v                                   v
+                +----------------------------+
+                |       API Gateway         |
+                +-------------+-------------+
+                              |
+                +-------------+-------------+
+                |    IamService API         |
+                +-------------+-------------+
+                |    CustomerService API    |
+                +-------------+-------------+
+                |    AccountService API     |
+                +-------------+-------------+
+                |  TransactionService API   |
+                +-------------+-------------+
+                | NotificationService API   |
+                +--------------------------+
+                              |
+             +----------------+----------------+
+             |                                 |
+             v                                 v
+   +-------------------+             +-----------------+
+   | PostgreSQL (per   |             | RabbitMQ        |
+   | service database) |             | (message broker)|
+   +-------------------+             +-----------------+
 ```
 
-Key point:
+![alt text](image-5.png)
 
-> The **domain model** serves the **internal business rules** of the bounded context.  
-> The **integration model** serves the **outside world** (APIs, events, other services).
+Each service:
 
-Keeping them separate gives you flexibility to evolve your internals without breaking everyone who consumes your APIs.
+- Has its **own database** (PostgreSQL schema or instance).
+- Connects to **RabbitMQ** to publish/consume events using **MassTransit**.
+- Is wrapped in a Docker container.
 
-## 2.9 High-Level Business Workflows
-
-To validate our domain architecture, we run it through a few core workflows.
-
-### Workflow 1 — Open a New Account
-
-1. User logs in via **IAM**.
-2. Frontend calls **Customer Service** to fetch or create a customer profile.
-3. Frontend calls **Account Service** to open a new account for that customer.
-4. Account Service:
-   - Validates customer eligibility (simplified)
-   - Creates an `Account` in its own database
-   - Emits `AccountOpened` event
-5. Other services (e.g., Notifications) may react to `AccountOpened`.
-
-Bounded contexts involved: **IAM, Customers, Accounts, Notifications**.
+The API Gateway is also a container, routing traffic to these services.
 
 ---
 
-### Workflow 2 — Deposit Money
+## 2.6 Key workflows
 
-1. User initiates a deposit from the frontend.
-2. Gateway forwards the request to **Transaction Service**.
-3. Transaction Service:
-   - Validates the account and amount
-   - Records a `Transaction` in its ledger
-   - Emits `TransactionCompleted`
-4. **Account Service** listens to `TransactionCompleted` and updates balances.
-5. **Notification Service** sends a “Deposit received” email to the customer.
+To make this architecture concrete, let’s walk through a few important workflows.
 
-Bounded contexts involved: **IAM (auth), Transactions, Accounts, Notifications**.
+### 2.6.1 Customer onboarding and first login
 
----
+1. A back-office agent opens the **Back-Office Portal** and logs in via IAM.
+2. The agent starts a **“New Customer”** workflow in the Customer app (calling `CustomerService`).
+3. CustomerService stores KYC data and marks the customer as `PendingVerification`.
+4. Once verification passes, CustomerService marks the customer as `Verified` and publishes a `CustomerVerified` event via RabbitMQ.
+5. A consumer in `IamService` listens for `CustomerVerified` and:
+   - Creates a corresponding IAM user (if not already created).
+   - Sends a “set password” / “welcome” notification via NotificationService.
+6. The customer receives an email/SMS with a link to set their password and logs in through the **Customer Portal**.
 
-### Workflow 3 — Transfer Between Internal Accounts
+At the end of this flow, we have:
 
-1. User selects a source and destination account.
-2. Frontend calls **Transaction Service** to create a transfer.
-3. Transaction Service:
-   - Validates that both accounts exist and are active
-   - Ensures the source account has sufficient balance (via Accounts or cached info)
-   - Creates a transfer transaction (debit source, credit destination)
-   - Emits `TransactionCompleted` (or separate events for debit/credit)
-4. **Account Service** updates both account balances.
-5. **Notification Service** may notify the account owner(s).
-
-Bounded contexts involved: **IAM, Transactions, Accounts, Notifications**.
-
-These workflows validate that our bounded contexts are **cohesive internally** and **cooperate cleanly** via events and APIs.
+- A verified customer profile in CustomerService.
+- A corresponding User in IAM with credentials.
+- A first login through the customer UI.
 
 ---
 
-## 2.10 System Context & Container View
+### 2.6.2 Opening an account
 
-To communicate the architecture to other people (and to future you), it’s useful to have a couple of static diagrams:
+1. A back-office agent selects a verified customer in the Back-Office Portal.
+2. The agent initiates **“Open Account”** (calls `AccountService` with the customer ID and account type).
+3. AccountService:
+   - Validates that the customer exists and is eligible (it may call CustomerService or use cached data).
+   - Creates a new account with initial balance and status `Active`.
+   - Publishes `AccountOpened` event via RabbitMQ.
+4. NotificationService listens to `AccountOpened` and sends an email/SMS to the customer.
 
-- A **System Context diagram** — the Banking Suite as a single system and the external actors around it.
-- A **Container diagram** — the main containers (frontend, gateway, microservices, databases, message broker) and how they relate.
-
-![System Context Diagram](c4-system-context.png)
-
-_System Context — the Banking Suite as seen by users and external systems._
-
-![Container Diagram](c4-container.png)
-
-_Container View — frontend, gateway, microservices, databases, and messaging._
-
-> You don’t need to memorize every box and arrow. The purpose of these diagrams is to keep the team aligned on the **big picture** while you dive into implementation details.
+The customer can now see their account when they log into the Customer Portal.
 
 ---
 
-## 2.11 Summary & What’s Next
+### 2.6.3 Buying an electricity token (example payment flow)
 
-In this chapter, you:
+1. A customer logs into the **Customer Portal** and selects **“Buy Electricity Token”**.
+2. The UI collects:
+   - Meter number
+   - Amount
+   - Source account
+3. The UI calls an endpoint in the `TransactionService` (`POST /payments/electricity`).
+4. TransactionService:
+   - Validates the request (e.g., sufficient funds by querying AccountService).
+   - Posts the accounting entries (debit from the customer’s account, credit to a “utility clearing account”).
+   - Calls the external **Utility Provider API** to actually buy the token.
+   - Saves the token and basic metadata in its own database.
+   - Publishes `PaymentCompleted` (or `PaymentFailed`) event via RabbitMQ.
+5. NotificationService listens for `PaymentCompleted` and sends:
+   - An SMS or email with the token code and amount.
+6. The customer sees the transaction and token in their **Customer Portal** history.
 
-- Identified the main **bounded contexts** of a digital bank: IAM, Customers, Accounts, Transactions, Notifications.
-- Saw how each context has a **clear responsibility** and owns its own data and rules.
-- Learned how **events** like `AccountOpened` and `TransactionCompleted` are used to integrate services in an **event-driven** way.
-- Understood the difference between **domain models** and **integration models** and why they shouldn’t be the same thing.
-- Walked through core **business workflows** (open account, deposit, transfer) and mapped them to contexts.
-- Saw how the system fits into **system context** and **container** views.
+Later, airtime top-ups and insurance payments follow a similar pattern with different external APIs.
 
-You now have a solid understanding of **what** you’re building in domain terms and **how** the pieces relate.
+---
 
-In the next chapter, we’ll make this architecture concrete on your machine:
+### 2.6.4 Failed login and lockout
 
-- Set up your development environment
-- Create the GitHub repository and base structure
-- Define the branch strategy you’ll use for the rest of the book
+1. A user attempts to log in via IAM.
+2. IAM checks the credentials:
+   - If incorrect, increments `AccessFailedCount`.
+3. After **3 failed attempts**, IAM:
+   - Locks the account for a configured period.
+   - Publishes a `UserLockedOut` event (optional but recommended).
+4. NotificationService listens to `UserLockedOut` and sends a warning email/SMS.
 
-From there, we move from architecture to code — with a clear direction already in place.
+The frontends show a clear error message when the account is locked.
+
+---
+
+## 2.7 Where RabbitMQ + MassTransit fit in
+
+So far we’ve mentioned events a lot. Here’s how they fit in technically.
+
+- **RabbitMQ** is our **message broker**:
+
+  - Services publish and consume messages via exchanges and queues.
+  - It runs as a container in our Docker environment.
+
+- **MassTransit** is a **.NET library** that:
+  - Hides most of the RabbitMQ boilerplate.
+  - Lets us publish and consume strongly-typed messages.
+  - Integrates nicely with ASP.NET Core and dependency injection.
+
+We’ll mostly use **events** rather than commands:
+
+- Events are things that **have happened**:
+
+  - `CustomerVerified`
+  - `AccountOpened`
+  - `PaymentCompleted`
+  - `UserLockedOut`
+
+- Services **decide how to react** to these events:
+  - IAM reacts to `CustomerVerified`.
+  - NotificationService reacts to many events.
+  - Reporting (if added) could react to all of them for analytics.
+
+When we get to the implementation chapters, you’ll see:
+
+- A shared **message contract library** for event types.
+- MassTransit configuration per service.
+- Integration tests that ensure events are published and consumed correctly.
+
+---
+
+## 2.8 How this shapes the code structure
+
+The domain architecture we’ve just defined has a direct impact on how we structure code.
+
+In the main source repository, the backend will roughly look like:
+
+```text
+digital-banking-suite/
+└─ src/
+   └─ backend/
+      ├─ BuildingBlocks/
+      │  ├─ BankingSuite.BuildingBlocks.Domain/
+      │  ├─ BankingSuite.BuildingBlocks.Application/
+      │  └─ BankingSuite.BuildingBlocks.Infrastructure/
+      │
+      ├─ Services/
+      │  ├─ IamService/
+      │  │  ├─ BankingSuite.IamService.Domain/
+      │  │  ├─ BankingSuite.IamService.Application/
+      │  │  ├─ BankingSuite.IamService.Infrastructure/
+      │  │  └─ BankingSuite.IamService.API/
+      │  ├─ CustomerService/
+      │  ├─ AccountService/
+      │  ├─ TransactionService/
+      │  └─ NotificationService/
+      │
+      └─ ApiGateway/
+         └─ BankingSuite.ApiGateway/
+```
+
+Each service follows the same pattern:
+
+- **Domain** – Entities, value objects, aggregates, domain events, domain services.
+- **Application** – CQRS commands, queries, DTOs, application services.
+- **Infrastructure** – EF Core, PostgreSQL, Identity (for IAM), MassTransit + RabbitMQ, external APIs.
+- **API** – FastEndpoints definitions, request/response mapping, authentication, Swagger.
+
+We’ll also have:
+
+- `tests/` – unit + integration tests per service.
+- `infra/` – Docker compose with:
+  - One container per microservice
+  - One Postgres container per service (or schema, depending on how we set it up)
+  - One RabbitMQ container
+
+The **Angular workspace** under `src/frontend/` will reflect the same bounded contexts with feature libraries like:
+
+- `auth`
+- `customers`
+- `accounts`
+- `transactions`
+
+and separate apps:
+
+- `backoffice-app`
+- `customer-app`
+
+---
+
+## 2.9 Looking ahead
+
+In the next chapters we’ll start turning this architecture into something tangible.
+
+- In **Chapter 03**, we’ll set up the **development environment and repositories**, including:
+
+  - .NET 10 SDK, Angular 21, Nx, Visual Studio 2026
+  - Git branching strategy
+  - Initial solution and folder structure
+
+- In **Chapter 04 and beyond**, we’ll:
+  - Introduce Docker, tests and CI early.
+  - Create the **BuildingBlocks** projects.
+  - Scaffold the skeleton of our microservices.
+  - Then dive deep into the **IAM service** as the first real implementation.
+
+From there, we’ll repeat the **backend + messaging + frontend** pattern for **Customers, Accounts and Transactions/Payments**, always guided by the domain architecture you’ve just seen.
+
+With the big picture in place, we’re ready to start building.

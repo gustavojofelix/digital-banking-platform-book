@@ -1,663 +1,318 @@
-# Chapter 4 — Docker from Day Zero
+# Chapter 04 — Docker from Day Zero: Local Infrastructure with PostgreSQL & RabbitMQ
 
-In this chapter, we stop talking _about_ containers and actually start running our Banking Suite _inside_ containers.
+In the previous chapter we prepared our **development environment**, created the `digital-banking-suite` repository and set up a simple folder structure.
 
-By the end of this chapter, you will:
+Before we create any microservices, we’ll prepare our **local infrastructure** using Docker:
 
-- Understand why containers are non-negotiable for a modern banking platform.
-- Build and run a minimal backend service in Docker.
-- Create a reusable multi-stage Dockerfile for .NET 9 microservices.
-- Wire up a first `docker-compose.yml` to run the API + database together.
-- Adopt simple patterns you’ll reuse for every service in this book.
+- **PostgreSQL** databases for our services
+- **RabbitMQ** as the message broker
 
-We’ll focus on one service as a concrete example: **AccountService**.
+We want to be able to run:
 
-I> In this chapter, **AccountService is a minimal placeholder service** used purely to demonstrate Docker and basic infrastructure patterns. In later chapters—_after we design IAM and Customer services properly_—we’ll come back and rebuild AccountService as the real, domain-rich service that depends on them.
+- IAM, Customer, Account, Transaction and Notification services against their own databases
+- All asynchronous events through **RabbitMQ**
 
----
+By the end of this chapter you will:
 
-## 4.1 Git Setup for This Chapter (Feature Branch)
+- Have a working `infra/docker-compose.dev.yml` file.
+- Be able to start PostgreSQL and RabbitMQ with a single `docker compose` command.
+- See containers running and ready to accept connections.
+- Tag the repo so this setup is always easy to return to.
 
-Before we write any code or YAML, we follow the same rule as in previous chapters:
-
-> **Each build chapter gets its own feature branch.**  
-> We only merge back to `develop` after the chapter is complete and CI is green.
-
-For this chapter we’ll use:
-
-- Branch name: `feature/ch04-docker-from-day-zero`
-
-From your local clone:
-
-```bash
-cd digital-banking-suite
-
-# Make sure you're on develop and up to date
-git checkout develop
-git pull origin develop
-
-# Create a new branch for this chapter
-git checkout -b feature/ch04-docker-from-day-zero
-```
-
-All the changes you make in this chapter (code, Dockerfiles, compose files, docs) should happen on this branch.
-
-T> Keeping a separate branch per chapter makes it easy to review your work, roll back if needed, and see CI runs per chapter in GitHub.
+> **IDE note:** In this book we assume you are **primarily using Visual Studio 2026**.  
+> If you use Rider, VS Code or another IDE, follow similar steps (create files/folders in your IDE or via the command line).
 
 ---
 
-### 4.1.1 Ensuring `.gitignore` Is Ready for Containers
+## 4.1 Why containers now?
 
-Before we start creating projects and running `dotnet` or Docker commands, let’s make sure Git ignores all the noisy build artifacts.
+We want our readers (and future team members) to:
 
-At the root of your repository, create (or update) a `.gitignore` file:
+- Run **exactly the same infrastructure** on any machine.
+- Avoid local “it works on my machine” database setups.
+- Treat Docker as a **first-class citizen** from day one.
 
-```bash
-cd digital-banking-suite
-touch .gitignore
-```
+All backend services will eventually run in containers, but first we containerise:
 
-Open `.gitignore` and add the following:
+- **PostgreSQL** – one database per service (IAM, Customer, Account, Transaction, Notification).
+- **RabbitMQ** – shared message broker.
 
-```text
-# OS-specific files
-.DS_Store
-Thumbs.db
-
-# IDE / editor settings
-.vscode/
-.vs/
-*.user
-*.suo
-
-# .NET build outputs
-**/bin/
-**/obj/
-**/out/
-
-# Node / Angular (used later in the book)
-node_modules/
-dist/
-.nx/
-.angular/
-
-# Logs
-*.log
-
-# Misc
-*.tmp
-*.swp
-```
-
-T> We keep a **single `.gitignore` at the repo root** so all backend, frontend, and infra projects share the same ignore rules. This prevents accidentally committing `bin/`, `obj/`, `node_modules/`, and other generated files when we start building and running our services.
-
-## 4.2 Why Containers for a Digital Banking Platform?
-
-You could technically build this whole system without containers.
-
-You’d also:
-
-- Argue with “it works on my machine”.
-- Spend days recreating environments for new developers.
-- Fight version mismatches between your laptop, test servers, and production.
-
-Banking systems are:
-
-- **Distributed** – multiple services interacting across the network.
-- **Integration-heavy** – databases, message brokers, API gateways, etc.
-- **Sensitive** – you want predictable, repeatable deployments.
-
-Containers give us:
-
-- **Consistency** – “runs the same way on every machine.”
-- **Isolation** – each microservice has its own runtime, dependencies, and environment.
-- **Reproducible environments** – `docker compose up` is enough for a new developer to see the system running.
-- **Cloud-readiness** – whether you deploy to Kubernetes, Azure Container Apps, AWS ECS, or something else, containers are the standard unit of deployment.
-
-I> We’ll use **Docker** as the container runtime. Everything we do here will work in your local machine and in most cloud container platforms.
+We’ll use a single `docker-compose.dev.yml` file in the `infra` folder to manage everything.
 
 ---
 
-## 4.3 Assumptions & Prerequisites
+## 4.2 Open the repository in Visual Studio 2026
 
-By now you should already have (from Chapter 3):
+1. Start **Visual Studio 2026**.
+2. Go to **File → Open → Folder…**.
+3. Select the `digital-banking-suite` folder you created in Chapter 03.
 
-- **Docker Desktop** (Windows/macOS) or **Docker Engine** (Linux) installed.
-- The `digital-banking-suite` repository created with the basic folder structure:
+Visual Studio will load the folder as a **folder-based solution**, showing `src`, `infra`, `tests`, and `postman` in **Solution Explorer**.
 
-```text
-digital-banking-suite/
-README.md
-src/
-  backend/
-  frontend/
-infra/
-scripts/
-docs/
-.github/
-  workflows/
-```
-
-Let’s quickly verify Docker:
-
-```bash
-docker --version
-docker info
-```
+We’ll add files directly under `infra` using Visual Studio.
 
 ---
 
-## 4.4 Our First Service in a Container (Placeholder AccountService)
+## 4.3 Creating `docker-compose.dev.yml`
 
-We’ll start by creating a **minimal .NET 9 Web API** for `AccountService`. It won’t contain real banking logic yet – this chapter’s focus is on **containerization**, not domain rules or service dependencies.
+In Visual Studio:
 
-In the real system:
+1. In **Solution Explorer**, right-click the `infra` folder.
+2. Choose **Add → New Item…**.
+3. Select **Text File** (or “General → Text File”).
+4. Name it **`docker-compose.dev.yml`** and click **Add**.
 
-- AccountService will **depend on**:
-  - **IAMService** (for authenticated users and roles), and
-  - **CustomerService** (for customer profiles).
-- We’ll design and implement IAM and Customer **first**, then come back to give AccountService real behavior, aggregates, and invariants.
-
-For now, you can think of this AccountService as:
-
-> “A thin placeholder API whose job is to help us learn how to build and run services in Docker.”
-
-From the root of your repo:
-
-```bash
-cd digital-banking-suite
-
-# Create a folder for AccountService
-mkdir -p src/backend/AccountService
-
-# Create a minimal Web API in that folder
-dotnet new webapi \
-  -n AccountService.Api \
-  -o src/backend/AccountService/AccountService.Api
-```
-
-This will generate a basic .NET Web API with a default `Program.cs`, controllers, and HTTPS setup.
-
-Let’s do a quick sanity check (still without Docker):
-
-```bash
-cd src/backend/AccountService/AccountService.Api
-dotnet run
-```
-
-Open your browser at `https://localhost:5001/weatherforecast` or whatever URL the console shows. You should see the default API response or Swagger (depending on the template version).
-![alt text](image.png)
-
-Once you’re satisfied that:
-
-- The project builds
-- The API runs
-
-…press `Ctrl + C` to stop the app. Now we’re ready to move it into a container.
-
-I> Later chapters will **replace this placeholder behavior** with the real AccountService: accounts belonging to customers, protected by IAM, backed by PostgreSQL, and integrated with Transactions and Notifications.
-
----
-
-## 4.5 Writing a Multi-Stage Dockerfile for .NET 9
-
-We’ll use a **multi-stage Dockerfile**, which:
-
-- Uses a **SDK image** to restore, build, and publish the app.
-- Uses a **lighter runtime image** to actually run it.
-
-This gives us smaller, more secure images.
-
-Create a file at:
-
-`src/backend/AccountService/AccountService.Api/Dockerfile`
-
-with the following content:
-
-```dockerfile
-# ===========================
-# 1. Build stage
-# ===========================
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
-WORKDIR /src
-
-# Copy csproj and restore as distinct layers
-COPY ["AccountService.Api.csproj", "./"]
-RUN dotnet restore "AccountService.Api.csproj"
-
-# Copy the rest of the source code
-COPY . .
-
-# Build the project
-RUN dotnet build "AccountService.Api.csproj" -c Release -o /app/build
-
-# ===========================
-# 2. Publish stage
-# ===========================
-FROM build AS publish
-RUN dotnet publish "AccountService.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
-
-# ===========================
-# 3. Runtime stage
-# ===========================
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
-WORKDIR /app
-
-# Set a non-root user if desired (good practice for production)
-# USER app
-
-COPY --from=publish /app/publish .
-EXPOSE 8080
-
-# ASP.NET Core defaults to port 8080 in some container scenarios;
-# adjust ASPNETCORE_URLS if needed.
-ENV ASPNETCORE_URLS=http://+:8080
-
-ENTRYPOINT ["dotnet", "AccountService.Api.dll"]
-```
-
-A few important notes:
-
-- We keep the Dockerfile **close to the API project** so each service can have its own.
-- We explicitly set `EXPOSE 8080` and `ASPNETCORE_URLS`. We’ll map this port from Docker later.
-- We use `UseAppHost=false` to keep the image lighter (no platform-specific app host).
-
-T> This Dockerfile will become the **template** for our other backend services. Later, we’ll factor out common patterns, but for now it’s okay to keep one Dockerfile per service.
-
----
-
-## 4.6 Building & Running the AccountService Container
-
-From the `AccountService.Api` folder:
-
-```bash
-cd src/backend/AccountService/AccountService.Api
-
-# Build the Docker image
-docker build -t banking-suite/account-service:dev .
-```
-
-If the build succeeds, you’ll see something like:
-
-> Successfully built \<image-id>  
-> Successfully tagged banking-suite/account-service:dev
-
-Now run the container:
-
-```bash
-docker run --rm -p 5000:8080 banking-suite/account-service:dev
-```
-
-What this does:
-
-- `--rm` → remove the container when it stops.
-- `-p 5000:8080` → map port 5000 on your host to 8080 inside the container.
-- `banking-suite/account-service:dev` → the image we just built.
-
-Open `http://localhost:5000/swagger` (or the base URL, depending on the template). You should see the API running **inside a container**.
-
-Hit `Ctrl + C` to stop the container.
-
-I> From now on, whenever you see `docker run -p 5000:8080 banking-suite/account-service:dev`, you’ll know that you’re running the exact same environment that will run in staging or production.
-
----
-
-## 4.7 Dockerfile Template for Other Microservices
-
-We don’t want to reinvent the Dockerfile every time. Here’s the **generic pattern** we’ll reuse:
-
-```dockerfile
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
-WORKDIR /src
-
-COPY ["<ServiceName>.Api.csproj", "./"]
-RUN dotnet restore "<ServiceName>.Api.csproj"
-
-COPY . .
-RUN dotnet build "<ServiceName>.Api.csproj" -c Release -o /app/build
-
-FROM build AS publish
-RUN dotnet publish "<ServiceName>.Api.csproj" -c Release -o /app/publish /p:UseAppHost=false
-
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
-WORKDIR /app
-COPY --from=publish /app/publish .
-EXPOSE 8080
-ENV ASPNETCORE_URLS=http://+:8080
-ENTRYPOINT ["dotnet", "<ServiceName>.Api.dll"]
-```
-
-When you scaffold `IAMService.Api`, `CustomerService.Api`, etc., you’ll:
-
-- Copy this Dockerfile.
-- Replace `<ServiceName>` with the actual project name.
-
-Later in the book, we’ll:
-
-- Introduce **environment-specific configuration** (dev/staging/prod).
-- Inject connection strings and secrets using environment variables + secret managers.
-- Add **health checks** and other Docker awareness.
-
----
-
-## 4.8 Introducing docker-compose for the Banking Suite
-
-Running one service with `docker run` is okay, but we’re building a **suite**:
-
-- AccountService
-- IAMService
-- CustomerService
-- TransactionService
-- NotificationService
-- PostgreSQL
-- RabbitMQ
-- API Gateway
-
-We’ll orchestrate these with **Docker Compose**.
-
-For this chapter, we’ll start with a **minimal compose file** that runs:
-
-- `account-service`
-- `postgres` (for future use; we’ll wire it in the next chapters)
-
-Create `infra/docker-compose.dev.yml`:
+Now replace the file contents with the following YAML:
 
 ```yaml
 version: "3.9"
 
 services:
-  account-service:
-    image: banking-suite/account-service:dev
-    container_name: account-service
-    build:
-      context: ../src/backend/AccountService/AccountService.Api
-      dockerfile: Dockerfile
-    ports:
-      - "5000:8080"
-    environment:
-      ASPNETCORE_ENVIRONMENT: "Development"
-      # Placeholder DB connection string, will be used later
-      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=accounts_db;Username=accounts_user;Password=accounts_password"
-    depends_on:
-      - postgres
-
-  postgres:
+  # PostgreSQL for IAM Service
+  iam-db:
     image: postgres:16
-    container_name: postgres-accounts
-    restart: always
+    container_name: iam-db
     environment:
-      POSTGRES_DB: "accounts_db"
-      POSTGRES_USER: "accounts_user"
-      POSTGRES_PASSWORD: "accounts_password"
+      POSTGRES_USER: iam_user
+      POSTGRES_PASSWORD: iam_password
+      POSTGRES_DB: iam_service_db
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
-      - accounts_pgdata:/var/lib/postgresql/data
+      - iam-db-data:/var/lib/postgresql/data
+    networks:
+      - bankingsuite-network
+
+  # PostgreSQL for Customer Service
+  customer-db:
+    image: postgres:16
+    container_name: customer-db
+    environment:
+      POSTGRES_USER: customer_user
+      POSTGRES_PASSWORD: customer_password
+      POSTGRES_DB: customer_service_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - customer-db-data:/var/lib/postgresql/data
+    networks:
+      - bankingsuite-network
+
+  # PostgreSQL for Account Service
+  account-db:
+    image: postgres:16
+    container_name: account-db
+    environment:
+      POSTGRES_USER: account_user
+      POSTGRES_PASSWORD: account_password
+      POSTGRES_DB: account_service_db
+    ports:
+      - "5435:5432"
+    volumes:
+      - account-db-data:/var/lib/postgresql/data
+    networks:
+      - bankingsuite-network
+
+  # PostgreSQL for Transaction Service
+  transaction-db:
+    image: postgres:16
+    container_name: transaction-db
+    environment:
+      POSTGRES_USER: transaction_user
+      POSTGRES_PASSWORD: transaction_password
+      POSTGRES_DB: transaction_service_db
+    ports:
+      - "5436:5432"
+    volumes:
+      - transaction-db-data:/var/lib/postgresql/data
+    networks:
+      - bankingsuite-network
+
+  # PostgreSQL for Notification Service (optional but keeps pattern consistent)
+  notification-db:
+    image: postgres:16
+    container_name: notification-db
+    environment:
+      POSTGRES_USER: notification_user
+      POSTGRES_PASSWORD: notification_password
+      POSTGRES_DB: notification_service_db
+    ports:
+      - "5437:5432"
+    volumes:
+      - notification-db-data:/var/lib/postgresql/data
+    networks:
+      - bankingsuite-network
+
+  # RabbitMQ broker for messaging
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672" # AMQP
+      - "15672:15672" # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: rabbitmq
+      RABBITMQ_DEFAULT_PASS: rabbitmq
+    networks:
+      - bankingsuite-network
+
+networks:
+  bankingsuite-network:
+    driver: bridge
 
 volumes:
-  accounts_pgdata:
+  iam-db-data:
+  customer-db-data:
+  account-db-data:
+  transaction-db-data:
+  notification-db-data:
 ```
 
-A few important points:
+A few notes:
 
-- `build` → Compose will build the image from the `AccountService.Api` folder using the `Dockerfile` we wrote.
-- `depends_on` → ensures Postgres starts before AccountService (not a health check, just order).
-- `environment` → we’re already using the standard `ConnectionStrings:DefaultConnection` pattern via `__` double underscores.
+- We expose each Postgres container on a different local port (`5433`–`5437`) so they don’t conflict.
+- All containers join the same `bankingsuite-network` so services can talk to them by container name (`iam-db`, `customer-db`, etc.).
+- `rabbitmq:3-management` gives us the standard RabbitMQ **web UI** on port `15672`.
 
-T> Even though we’re not yet connecting AccountService to PostgreSQL, this setup prepares the ground. In future chapters we’ll add Entity Framework Core, migrations, and actual database operations.
-
-To run this stack:
-
-```bash
-cd infra
-docker compose -f docker-compose.dev.yml up --build
-```
-
-Then open:
-
-- `http://localhost:5000/swagger` → AccountService.
-- The Postgres container is also running and ready, even if the API doesn’t use it yet.
-
-To stop:
-
-```bash
-docker compose -f docker-compose.dev.yml down
-```
+We’ll later add the microservice containers (IAM, Customer, Account, etc.) to this same file.
 
 ---
 
-## 4.9 Handling Configuration & Secrets (The Right Way Later)
+## 4.4 Starting the infrastructure
 
-In this chapter, we’ve hard-coded values like:
+Open a terminal at the root of the repository (`digital-banking-suite`):
 
-- Database names.
-- Usernames and passwords.
+- From Visual Studio:
+  - Go to **View → Terminal** (or **View → Other Windows → Terminal**).
+  - Make sure the current directory is the repo root (you should see `infra/`, `src/`, etc.).
 
-This is **acceptable only for local development** and learning.
-
-In a real banking system, we’ll:
-
-- Move secrets to environment variables or secret stores (Azure Key Vault, AWS Secrets Manager, etc.).
-- Use **per-environment configuration files**.
-- Introduce **Docker secrets** or cloud-specific secret mechanisms.
-
-For now, our rules are:
-
-- Hard-coded secrets are allowed **only** inside `docker-compose.dev.yml` and only for your local machine.
-- Never commit real production secrets to the repository.
-- Later we will refactor these into a proper configuration strategy.
-
-W> Never re-use these sample passwords for anything outside your local dev environment. Treat them as intentionally weak and disposable.
-
----
-
-## 4.10 Common Docker Commands You’ll Use Constantly
-
-Here’s your **day-to-day cheat sheet**:
-
-Build an image manually:
+Run:
 
 ```bash
-docker build -t banking-suite/account-service:dev src/backend/AccountService/AccountService.Api
+docker compose -f infra/docker-compose.dev.yml up -d
 ```
 
-Run a single container:
+This will:
 
-```bash
-docker run --rm -p 5000:8080 banking-suite/account-service:dev
-```
+- Pull the Postgres and RabbitMQ images (first run only).
+- Start all containers in the background (`-d`).
 
-See running containers:
+Check running containers:
 
 ```bash
 docker ps
 ```
 
-See all containers (including stopped):
+You should see entries similar to:
 
-```bash
-docker ps -a
+```text
+CONTAINER ID   IMAGE                   NAMES
+...            rabbitmq:3-management   rabbitmq
+...            postgres:16             iam-db
+...            postgres:16             customer-db
+...            postgres:16             account-db
+...            postgres:16             transaction-db
+...            postgres:16             notification-db
 ```
-
-Stop and remove containers created by compose:
-
-```bash
-cd infra
-docker compose -f docker-compose.dev.yml down
-```
-
-Remove dangling images:
-
-```bash
-docker image prune
-```
-
-View logs from a service in Compose:
-
-```bash
-cd infra
-docker compose -f docker-compose.dev.yml logs -f account-service
-```
-
-T> When something doesn’t work, your first stops should be:  
-T> `docker ps` (is it running?) and `docker logs <container-name>` (what went wrong?).
 
 ---
 
-## 4.11 Updating the CI Pipeline for Backend Projects
+## 4.5 Verifying PostgreSQL
 
-In Chapter 3 we added a minimal CI pipeline that tried to restore the backend like this:
+You can test that one of the Postgres instances is working by using `psql` or any GUI client (e.g. DBeaver, Azure Data Studio). For example:
 
-```bash
-dotnet restore ./src/backend
+- **Server/host:** `localhost`
+- **Port:** `5433`
+- **Database:** `iam_service_db`
+- **User:** `iam_user`
+- **Password:** `iam_password`
+
+Repeat with ports `5434`–`5437` and the corresponding credentials if you want to verify the others.
+
+We won’t create tables yet — that will happen when we add EF Core migrations in later chapters.
+
+---
+
+## 4.6 Verifying RabbitMQ
+
+Open your browser and navigate to:
+
+```text
+http://localhost:15672
 ```
 
-This works only if the current folder directly contains a `.csproj` or `.sln` file.  
-In our structure, the backend projects live deeper (for example `src/backend/AccountService/AccountService.Api/AccountService.Api.csproj`), so the CI job fails with:
+Log in with:
 
-> `MSBUILD : error MSB1003: Specify a project or solution file. The current working directory does not contain a project or solution file.`
+- **Username:** `rabbitmq`
+- **Password:** `rabbitmq`
 
-Let’s fix the pipeline so it restores **all backend projects** under `src/backend`.
+You should see the RabbitMQ management UI.  
+Later, when we publish and consume messages, you’ll see exchanges, queues and messages here.
 
-Open `.github/workflows/ci.yml` and replace the backend restore step with:
+---
 
-```yaml
-- name: Restore .NET backend projects (if any)
-  run: |
-    if [ -d "./src/backend" ]; then
-      # Find all .csproj files under src/backend
-      projects=$(find ./src/backend -name "*.csproj")
+## 4.7 Stopping and cleaning up containers
 
-      if [ -z "$projects" ]; then
-        echo "No .NET backend projects found yet."
-      else
-        echo "Restoring .NET backend projects..."
-        for proj in $projects; do
-          echo "Restoring $proj"
-          dotnet restore "$proj"
-        done
-      fi
-    else
-      echo "No backend folder yet."
-    fi
-```
-
-From now on:
-
-- If there are **no backend projects yet**, CI prints a message and succeeds.
-- As soon as we add services like `AccountService`, each `*.csproj` is restored individually.
-- The same pattern will continue to work as we add more microservices (IAM, Customer, Transaction, etc.).
-
-## 4.12 Wrap-up: PR, CI & Merge to `develop`
-
-At this point you should have, on the branch  
-`feature/ch04-docker-from-day-zero`:
-
-- The placeholder `AccountService.Api` project.
-- A working multi-stage `Dockerfile`.
-- The `infra/docker-compose.dev.yml` file.
-- This chapter’s markdown file (if you keep docs in the repo).
-
-Now we finish the Git workflow for the chapter.
-
-### 4.12.1 Committing Your Changes
-
-Stage and commit your work in logical chunks. For example:
+To stop all containers defined in `docker-compose.dev.yml`:
 
 ```bash
-git add src/backend/AccountService/AccountService.Api/*
-git commit -m "feat(docker): add placeholder AccountService.Api"
+docker compose -f infra/docker-compose.dev.yml down
+```
 
+This will stop and remove the containers but **keep the volumes** (your data) by default.
+
+If you want to remove volumes as well (for a completely fresh start):
+
+```bash
+docker compose -f infra/docker-compose.dev.yml down -v
+```
+
+Use this with care — it will delete all Postgres data.
+
+---
+
+## 4.8 Committing and tagging Chapter 04
+
+Let’s follow our standard workflow and commit these changes.
+
+In the **Visual Studio 2026** Git window or any terminal:
+
+```bash
+git status
 git add infra/docker-compose.dev.yml
-git commit -m "chore(docker): add dev docker-compose stack"
-
-git add docs/04-docker-from-day-zero.md
-git commit -m "docs(ch04): document Docker from day zero"
+git commit -m "ch04: add docker-compose for PostgreSQL and RabbitMQ"
 ```
 
-T> You don’t need to perfectly match these messages, but keep them **clear and scoped**. Avoid “misc changes” or “stuff”.
-
-### 4.12.2 Pushing and Opening a Pull Request
-
-Push the branch to GitHub:
+Push to GitHub (from `develop` or a feature branch such as `feature/ch04-docker-infra`):
 
 ```bash
-git push -u origin feature/ch04-docker-from-day-zero
+git push
 ```
-
-Then, in GitHub:
-
-1. Open a Pull Request from  
-   `feature/ch04-docker-from-day-zero` → `develop`
-2. Give it a clear title, for example:  
-   **"Chapter 4 – Docker from Day Zero"**
-3. Briefly describe what this PR adds:
-   - Placeholder AccountService
-   - Dockerfile and docker-compose.dev.yml
-   - Documentation for Chapter 4
-
-### 4.12.3 Watching the CI Pipeline
-
-When you open the PR, the CI workflow (`.github/workflows/ci.yml`) should run automatically.
-
-At this stage, CI might only:
-
-- Restore dependencies.
-- Build the solution (or individual projects).
-
-Later in the book we will enhance CI to:
-
-- Build Docker images.
-- Run unit and integration tests.
-- Optionally run formatters and linters.
-
-W> Do not merge into `develop` if the pipeline is red. Fix the issue (build errors, missing files, etc.), push again, and wait for CI to pass.
-
-### 4.12.4 Merging to `develop`
-
-Once the pipeline is green:
-
-1. Merge the PR into `develop`.
-2. Optionally delete the feature branch:
-
-   - in GitHub (Delete branch button), and/or
-   - locally:
-
-   ```bash
-   git checkout develop
-   git pull origin develop
-   git branch -d feature/ch04-docker-from-day-zero
-   ```
-
-At this point:
-
-- `develop` contains all Chapter 4 changes.
-- CI has already validated the chapter’s code and Docker setup.
-- You are ready to start the next chapter from a clean, green baseline.
 
 ---
 
-## 4.13 Summary & What’s Next
+## 4.9 Sanity checklist
 
-In this chapter, we:
+Before moving on, confirm:
 
-- Created our **first backend service** (`AccountService.Api`) as a **placeholder** to demonstrate containerization.
-- Wrote a **multi-stage Dockerfile** for .NET 9, which we’ll reuse across microservices.
-- Built and ran the service in a container using `docker build` and `docker run`.
-- Introduced a minimal **Docker Compose** setup (`docker-compose.dev.yml`) to orchestrate:
-  - `account-service`
-  - `postgres` (as a future database backend)
-- Practiced the **per-chapter Git workflow**:
-  - Create branch → implement → push → PR → CI → merge to `develop`.
+- [x] `docker-compose.dev.yml` exists under `infra/`.
+- [x] `docker compose -f infra/docker-compose.dev.yml up -d` starts all Postgres and RabbitMQ containers.
+- [x] You can open the RabbitMQ UI at `http://localhost:15672`.
+- [x] You can connect to at least one Postgres instance using the provided credentials.
+- [x] Changes are committed to Git and (optionally) tagged as `chapter-04-docker-infra`.
 
-Remember:
+If all checks pass, your local infrastructure is ready.
 
-I> This is not the final, domain-complete AccountService. In later chapters, after we’ve built **IAMService** and **CustomerService**, we’ll come back and turn AccountService into the real thing: accounts owned by customers, protected by IAM, persisted in PostgreSQL, and integrated with Transactions and Notifications.
+---
 
-In the next chapters of Part II, we will:
+## 4.10 What’s next
 
-- Wire in **testing** (unit and integration tests that can run against containers).
-- Evolve our **CI pipeline** to build and test these images on every push.
-- Introduce a more complete **backend solution structure** and a shared kernel for domain-driven design.
+In the next chapter we will:
 
-From this point on, think of Docker as your default runtime. If the Banking Suite isn’t running in containers, it’s not really running.
+- Introduce our **first backend solution and projects** using **Visual Studio 2026**.
+- Create the shared **BuildingBlocks** projects that will be reused by all microservices.
+- Add a simple **“health check”** API to validate that .NET 10, Docker and PostgreSQL can work together.
+- Start wiring in **tests** and **GitHub Actions CI** so that from IAM onward, every chapter builds on a solid foundation.
+
+We now have a reliable, repeatable **containerised infrastructure**.  
+Next, we’ll start putting actual .NET 10 code on top of it.

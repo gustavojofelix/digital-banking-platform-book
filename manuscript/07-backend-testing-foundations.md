@@ -1,926 +1,523 @@
-# Chapter 6 — Backend Testing Foundations
+# Chapter 06 — Backend Tests & CI with Code Coverage
 
-So far in Part II, we:
+In the previous chapter we created:
 
-- Containerized our first placeholder backend service (`AccountService.Api`) with Docker and docker-compose.
-- Created a **backend solution** (`BankingSuite.Backend.sln`) and a **shared `BuildingBlocks` library** containing `Entity`, `ValueObject`, and `Result`.
+- The `BankingSuite.Backend.sln` solution
+- Shared **BuildingBlocks** projects
+- The **IAM service skeleton** with a `/health` endpoint using FastEndpoints
 
-In this chapter, we add the next critical piece: **automated tests**.
+Now we’ll add:
 
-By the end of this chapter, you will:
+- **Unit & integration test projects** for the IAM service
+- **Coverlet** for code coverage
+- **ReportGenerator** for HTML coverage reports
+- A **GitHub Actions** workflow to run tests and generate coverage in CI
 
-- Understand the basic **testing strategy** for the Banking Suite backend.
-- Create a **test project** for the backend (`BuildingBlocks.UnitTests`).
-- Add the first **meaningful tests** for `Result`, `ValueObject`, and `Entity`.
-- Wire backend tests into **GitHub Actions** so every PR runs tests.
-- Generate **code coverage reports**, view them in **VS Code**, and publish them as artifacts in **GitHub Actions**.
+By the end of this chapter you will:
 
----
+- Run backend tests from **Visual Studio 2026** and the **CLI**
+- Generate a **coverage report** locally
+- Have a working **CI pipeline** that runs tests and publishes coverage artifacts
+- Tag the repository state for this chapter
 
-## 6.1 Git Setup for This Chapter (Feature Branch)
-
-As always, this chapter’s work lives in its own feature branch.
-
-> **Each build chapter gets its own feature branch.**  
-> We only merge back to `develop` after the chapter is complete and CI is green.
-
-For this chapter we’ll use:
-
-- Branch name: `feature/ch06-backend-testing-foundations`
-
-From your local clone:
-
-```bash
-cd digital-banking-suite
-
-# Make sure you're on develop and up to date
-git checkout develop
-git pull origin develop
-
-# Create a new branch for this chapter
-git checkout -b feature/ch06-backend-testing-foundations
-```
-
-All changes for this chapter (test project, test code, coverage setup, CI updates, docs) will happen on this branch.
-
-T> This chapter is intentionally small but important. You’ll feel its impact every time CI catches a bug before it hits `develop`.
+> **IDE note:** All project/file steps assume **Visual Studio 2026**.  
+> If you’re using another IDE, create equivalent projects and references using your tooling or the `dotnet` CLI.
 
 ---
 
-## 6.2 Testing Strategy for the Banking Suite
+## 6.1 Create test projects for IAM
 
-We’re building a **real** banking platform, not a toy project. That means we care about:
+We’ll add two projects under the `tests` folder:
 
-- **Fast feedback** – tests should run on every PR.
-- **Clear layers** – unit tests for core domain and building blocks, integration tests for services.
-- **Confidence** – catching regressions before they reach production.
+- `BankingSuite.IamService.UnitTests`
+- `BankingSuite.IamService.IntegrationTests`
 
-We’ll use a layered approach:
+And a `Tests` solution folder so they’re organised inside the solution.
 
-- **Unit tests**:
-  - Pure C# tests.
-  - No network, no Docker, no database.
-  - Focused on domain logic and building blocks (`Entity`, `ValueObject`, `Result`, aggregates, domain services).
-- **Integration tests** (later chapters):
-  - Exercising microservices via HTTP or messaging.
-  - Using test containers or docker-compose for dependencies (PostgreSQL, RabbitMQ).
+### 6.1.1 Add the `Tests` solution folder
 
-In this chapter, we start with:
+1. In **Solution Explorer**, right-click the **`BankingSuite.Backend`** solution.
+2. Choose **Add → New Solution Folder**.
+3. Name it **`Tests`**.
 
-- **Unit tests for `BuildingBlocks`**:
-  - `Result` – ensure success/failure behaves correctly.
-  - `ValueObject` – equality semantics.
-  - `Entity` – identity-based equality.
-
-I> Starting with shared building blocks is a great way to ensure the foundation is solid before we build business-critical logic on top of it.
+This is just a logical folder in the solution (not a physical one).
 
 ---
 
-## 6.3 Creating the Backend Test Project
+### 6.1.2 Create `BankingSuite.IamService.UnitTests` (xUnit)
 
-We’ll begin by creating a dedicated **xUnit** test project for the `BuildingBlocks` library.
+1. Right-click the **`Tests`** solution folder → **Add → New Project…**
+2. Search for **“xUnit Test Project”**.
+3. Select **xUnit Test Project (.NET)** and click **Next**.
+4. Set:
+   - **Project name:** `BankingSuite.IamService.UnitTests`
+   - **Location:** `digital-banking-suite/tests`
+5. Click **Next**, ensure **Framework** is **`.NET 10.0 (net10.0)`**, then click **Create**.
 
-From the backend folder:
-
-```bash
-cd digital-banking-suite/src/backend
-
-# Create xUnit test project for BuildingBlocks
-dotnet new xunit \
-  -n BuildingBlocks.UnitTests \
-  -o BuildingBlocks.UnitTests
-```
-
-This creates:
+Visual Studio creates:
 
 ```text
-src/backend/
-  BankingSuite.Backend.sln
-  BuildingBlocks/
-    BuildingBlocks.csproj
-    Entity.cs
-    ValueObject.cs
-    Result.cs
-  BuildingBlocks.UnitTests/
-    BuildingBlocks.UnitTests.csproj
-    UnitTest1.cs
-  AccountService/
-    AccountService.Api/
-      AccountService.Api.csproj
+tests/BankingSuite.IamService.UnitTests/
 ```
 
-Now add the test project to the backend solution:
+Delete the default `UnitTest1.cs`.
 
-```bash
-dotnet sln BankingSuite.Backend.sln add ./BuildingBlocks.UnitTests/BuildingBlocks.UnitTests.csproj
-```
+#### Add references and packages
 
-We also need the test project to reference the `BuildingBlocks` project:
+1. Right-click `BankingSuite.IamService.UnitTests` → **Add → Project Reference…**
+2. Tick:
+   - `BankingSuite.IamService.Domain`
+   - `BankingSuite.IamService.Application`
+   - `BankingSuite.BuildingBlocks.Domain`
+3. Click **OK**.
 
-```bash
-dotnet add ./BuildingBlocks.UnitTests/BuildingBlocks.UnitTests.csproj \
-  reference ./BuildingBlocks/BuildingBlocks.csproj
-```
+Now add helpful NuGet packages:
 
-You can now build the solution to verify everything compiles:
+- Right-click `BankingSuite.IamService.UnitTests` → **Manage NuGet Packages…** → **Browse** tab, install:
+  - `xunit` (if not already there)
+  - `xunit.runner.visualstudio`
+  - `FluentAssertions`
+  - `coverlet.msbuild`
 
-```bash
-dotnet build BankingSuite.Backend.sln
-```
-
-If this succeeds, the test project and building blocks are wired correctly.
-
-T> For now, we’re only adding tests for `BuildingBlocks`. Later, we’ll create more test projects like `AccountService.UnitTests`, `IAMService.UnitTests`, etc.
+We’ll use `coverlet.msbuild` when we run `dotnet test` with coverage.
 
 ---
 
-## 6.4 Cleaning Up the Default Test Class
+### 6.1.3 Create `BankingSuite.IamService.IntegrationTests` (xUnit)
 
-The `dotnet new xunit` template creates a default `UnitTest1.cs`. Let’s remove it and create our own tests.
+Repeat the process:
 
-From `src/backend`:
+1. Right-click the **`Tests`** solution folder → **Add → New Project…**
+2. Choose **xUnit Test Project**.
+3. Set:
+   - **Project name:** `BankingSuite.IamService.IntegrationTests`
+   - **Location:** `digital-banking-suite/tests`
+4. Target **`.NET 10.0`** and click **Create**.
 
-```bash
-cd digital-banking-suite/src/backend
+Delete the default `UnitTest1.cs`.
 
-rm BuildingBlocks.UnitTests/UnitTest1.cs
-```
+#### Add references and packages
 
-Now we’ll add our own test classes in the next sections.
+1. Right-click `BankingSuite.IamService.IntegrationTests` → **Add → Project Reference…**
+2. Tick:
+   - `BankingSuite.IamService.API`
+   - `BankingSuite.IamService.Infrastructure`
+   - `BankingSuite.IamService.Application`
+   - `BankingSuite.IamService.Domain`
+3. Click **OK**.
+
+Then add NuGet packages:
+
+- `xunit`
+- `xunit.runner.visualstudio`
+- `FluentAssertions`
+- `Microsoft.AspNetCore.Mvc.Testing`
+- `coverlet.msbuild`
+
+> `Microsoft.AspNetCore.Mvc.Testing` gives us `WebApplicationFactory<T>` which we’ll use to host the IAM API in-memory for integration tests.
 
 ---
 
-## 6.5 Testing the Result Type
+## 6.2 Make `Program` test-friendly
 
-We want to be confident that `Result` and `Result<T>` behave as expected:
+To use `WebApplicationFactory<Program>`, our entry point (`Program`) must be visible to the test project.
 
-- `Result.Success()` → `IsSuccess == true`, `IsFailure == false`, `Error == null`.
-- `Result.Failure("error")` → `IsSuccess == false`, `IsFailure == true`, `Error` contains our message.
-- The same semantics for `Result<T>`.
-
-First, we’ll add `coverlet.msbuild` so this test project can produce coverage (we’ll use it later).
-
-Open `src/backend/BuildingBlocks.UnitTests/BuildingBlocks.UnitTests.csproj` and ensure it looks like this (versions can differ slightly):
-
-```xml
-<Project Sdk="Microsoft.NET.Sdk">
-
-  <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
-  </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="xunit" Version="2.9.0" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-
-    <!-- Coverage support via Coverlet -->
-    <PackageReference Include="coverlet.msbuild" Version="6.0.0">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\BuildingBlocks\BuildingBlocks.csproj" />
-  </ItemGroup>
-
-</Project>
-```
-
-Restore packages:
-
-```bash
-cd digital-banking-suite/src/backend
-dotnet restore BuildingBlocks.UnitTests/BuildingBlocks.UnitTests.csproj
-```
-
-Now create `src/backend/BuildingBlocks.UnitTests/ResultTests.cs`:
+Open `src/backend/Services/IamService/BankingSuite.IamService.API/Program.cs` and, at the very bottom of the file, add:
 
 ```csharp
-using BuildingBlocks;
+public partial class Program;
+```
+
+The full file should still contain the FastEndpoints setup and end with this partial class declaration.
+
+This allows tests to reference `Program` as the entry point.
+
+---
+
+## 6.3 Add a sample unit test (Result type)
+
+We already have a `Result` type in `BankingSuite.BuildingBlocks.Domain.Abstractions`. Let’s write a simple unit test for it.
+
+In `BankingSuite.IamService.UnitTests`:
+
+1. Right-click the project → **Add → New Folder** → name it `Common`.
+2. Right-click the `Common` folder → **Add → Class…** → name it `ResultTests.cs`.
+
+Replace with:
+
+```csharp
+using BankingSuite.BuildingBlocks.Domain.Abstractions;
+using FluentAssertions;
 using Xunit;
 
-namespace BuildingBlocks.UnitTests;
+namespace BankingSuite.IamService.UnitTests.Common;
 
 public class ResultTests
 {
     [Fact]
-    public void Success_Should_Set_IsSuccess_True_And_IsFailure_False()
+    public void Success_Should_Set_IsSuccess_True_And_Error_Null()
     {
-        // Act
+        // Arrange & Act
         var result = Result.Success();
 
         // Assert
-        Assert.True(result.IsSuccess);
-        Assert.False(result.IsFailure);
-        Assert.Null(result.Error);
+        result.IsSuccess.Should().BeTrue();
+        result.IsFailure.Should().BeFalse();
+        result.Error.Should().BeNull();
     }
 
     [Fact]
     public void Failure_Should_Set_IsSuccess_False_And_Error_Message()
     {
         // Arrange
-        var errorMessage = "Something went wrong";
+        const string errorMessage = "Something went wrong";
 
         // Act
         var result = Result.Failure(errorMessage);
 
         // Assert
-        Assert.False(result.IsSuccess);
-        Assert.True(result.IsFailure);
-        Assert.Equal(errorMessage, result.Error);
+        result.IsSuccess.Should().BeFalse();
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(errorMessage);
     }
 
     [Fact]
-    public void ResultOfT_Success_Should_Contain_Value()
+    public void Generic_Success_Should_Expose_Value()
     {
         // Arrange
-        var value = 42;
+        const string expected = "OK";
 
         // Act
-        var result = Result<int>.Success(value);
+        var result = Result.Success(expected);
 
         // Assert
-        Assert.True(result.IsSuccess);
-        Assert.Equal(value, result.Value);
-        Assert.Null(result.Error);
-    }
-
-    [Fact]
-    public void ResultOfT_Failure_Should_Not_Contain_Value()
-    {
-        // Arrange
-        var errorMessage = "Failure with generic type";
-
-        // Act
-        var result = Result<int>.Failure(errorMessage);
-
-        // Assert
-        Assert.True(result.IsFailure);
-        Assert.Equal(errorMessage, result.Error);
-        Assert.Equal(default, result.Value);
+        result.IsSuccess.Should().BeTrue();
+        result.Value.Should().Be(expected);
+        result.Error.Should().BeNull();
     }
 }
 ```
 
-Run the tests locally:
-
-```bash
-cd digital-banking-suite/src/backend
-dotnet test BankingSuite.Backend.sln
-```
-
-You should see the test project discovered and all tests passing.
+This is a simple example, but it demonstrates the pattern we’ll use for domain and application tests.
 
 ---
 
-## 6.6 Testing ValueObject Equality
+## 6.4 Add an integration test for `/health`
 
-Next, let’s verify that our `ValueObject` base class behaves correctly for equality and inequality.
+Now we’ll test the IAM API’s `/health` endpoint.
 
-To do that, we’ll:
+In `BankingSuite.IamService.IntegrationTests`:
 
-1. Create a simple test-only value object, e.g. `TestMoney`.
-2. Write tests that compare different instances.
+1. Right-click the project → **Add → New Folder** → name it `Health`.
+2. Right-click the `Health` folder → **Add → Class…** → name it `HealthEndpointTests.cs`.
 
-Create `src/backend/BuildingBlocks.UnitTests/TestMoney.cs`:
-
-```csharp
-using BuildingBlocks;
-
-namespace BuildingBlocks.UnitTests;
-
-// Test-only value object to verify equality semantics
-public sealed class TestMoney : ValueObject
-{
-    public decimal Amount { get; }
-    public string Currency { get; }
-
-    public TestMoney(decimal amount, string currency)
-    {
-        Amount = amount;
-        Currency = currency;
-    }
-
-    protected override IEnumerable<object?> GetEqualityComponents()
-    {
-        yield return Amount;
-        yield return Currency;
-    }
-}
-```
-
-Now create `src/backend/BuildingBlocks.UnitTests/ValueObjectTests.cs`:
+Replace with:
 
 ```csharp
+using System.Net;
+using System.Net.Http.Json;
+using FluentAssertions;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
 
-namespace BuildingBlocks.UnitTests;
+namespace BankingSuite.IamService.IntegrationTests.Health;
 
-public class ValueObjectTests
+public class HealthEndpointTests : IClassFixture<WebApplicationFactory<Program>>
 {
-    [Fact]
-    public void Two_ValueObjects_With_Same_Values_Should_Be_Equal()
-    {
-        // Arrange
-        var a = new TestMoney(100m, "USD");
-        var b = new TestMoney(100m, "USD");
+    private readonly HttpClient _client;
 
-        // Act & Assert
-        Assert.Equal(a, b);
-        Assert.True(a == b);
-        Assert.False(a != b);
+    public HealthEndpointTests(WebApplicationFactory<Program> factory)
+    {
+        _client = factory.CreateClient();
     }
 
     [Fact]
-    public void Two_ValueObjects_With_Different_Values_Should_Not_Be_Equal()
+    public async Task Health_Should_Return_Healthy_Status()
     {
-        // Arrange
-        var a = new TestMoney(100m, "USD");
-        var b = new TestMoney(200m, "USD");
-
-        // Act & Assert
-        Assert.NotEqual(a, b);
-        Assert.True(a != b);
-        Assert.False(a == b);
-    }
-
-    [Fact]
-    public void ValueObject_Should_Have_Consistent_HashCode_For_Equal_Values()
-    {
-        // Arrange
-        var a = new TestMoney(50m, "EUR");
-        var b = new TestMoney(50m, "EUR");
-
         // Act
-        var hashA = a.GetHashCode();
-        var hashB = b.GetHashCode();
+        var response = await _client.GetAsync("/health");
 
         // Assert
-        Assert.Equal(hashA, hashB);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var payload = await response.Content.ReadFromJsonAsync<HealthResponse>();
+
+        payload.Should().NotBeNull();
+        payload!.Service.Should().Be("IamService");
+        payload.Status.Should().Be("Healthy");
+    }
+
+    private sealed class HealthResponse
+    {
+        public string? Service { get; set; }
+        public string? Status { get; set; }
+        public DateTime TimestampUtc { get; set; }
     }
 }
 ```
 
-Run the tests again:
+This test:
 
-```bash
-cd digital-banking-suite/src/backend
-dotnet test BankingSuite.Backend.sln
-```
-
-You should now see a few more tests running and passing.
-
-I> These tests are small, but they validate the “gravity” of your building blocks. Every future domain model that relies on `ValueObject` and `Result` will inherit these guarantees.
+- Boots the IAM API in-memory using `WebApplicationFactory<Program>`.
+- Sends a GET request to `/health`.
+- Asserts the status is `200 OK` and the payload matches what we return from `HealthCheckEndpoint`.
 
 ---
 
-## 6.7 (Optional) Testing Entity Equality
+## 6.5 Run tests from Visual Studio 2026
 
-Testing `Entity` is similar: we want to ensure entities with the same `Id` are considered equal.
+1. Open **Test → Test Explorer**.
+2. Click **Run All Tests**.
 
-This is optional at this stage, but it’s a good pattern to show.
+You should see:
 
-Create `src/backend/BuildingBlocks.UnitTests/TestEntity.cs`:
+- 3 passing tests in `ResultTests`.
+- 1 passing test in `HealthEndpointTests`.
 
-```csharp
-using BuildingBlocks;
-
-namespace BuildingBlocks.UnitTests;
-
-// Simple test-only entity for equality tests
-public sealed class TestEntity : Entity
-{
-    public string Name { get; }
-
-    public TestEntity(string name)
-        : base()
-    {
-        Name = name;
-    }
-
-    public TestEntity(Guid id, string name)
-        : base(id)
-    {
-        Name = name;
-    }
-}
-```
-
-Now create `src/backend/BuildingBlocks.UnitTests/EntityTests.cs`:
-
-```csharp
-using Xunit;
-
-namespace BuildingBlocks.UnitTests;
-
-public class EntityTests
-{
-    [Fact]
-    public void Entities_With_Same_Id_Should_Be_Equal()
-    {
-        // Arrange
-        var id = Guid.NewGuid();
-        var entityA = new TestEntity(id, "A");
-        var entityB = new TestEntity(id, "B");
-
-        // Act & Assert
-        Assert.Equal(entityA, entityB);
-        Assert.True(entityA == entityB);
-        Assert.False(entityA != entityB);
-    }
-
-    [Fact]
-    public void Entities_With_Different_Id_Should_Not_Be_Equal()
-    {
-        // Arrange
-        var entityA = new TestEntity(Guid.NewGuid(), "A");
-        var entityB = new TestEntity(Guid.NewGuid(), "A");
-
-        // Act & Assert
-        Assert.NotEqual(entityA, entityB);
-        Assert.True(entityA != entityB);
-        Assert.False(entityA == entityB);
-    }
-}
-```
-
-Run tests again:
-
-```bash
-cd digital-banking-suite/src/backend
-dotnet test BankingSuite.Backend.sln
-```
-
-All tests should still pass.
+If any tests fail, re-check `Program.cs` (partial class) and that all references/packages are in place.
 
 ---
 
-## 6.8 Visualizing Coverage in VS Code
+## 6.6 Install ReportGenerator tool
 
-Tests passing is great, but it’s even better when you can **see what they’re covering**.
+We’ll use `ReportGenerator` to generate HTML coverage reports from the coverage data produced by Coverlet.
 
-In this section you’ll:
-
-- Generate a coverage file from `dotnet test`.
-- Use **Coverage Gutters** to show line coverage inside VS Code.
-- Use **HTML Preview** (George Oliveira) to view a rich HTML coverage report **without leaving VS Code**.
-- Ignore coverage artifacts in Git so they don’t pollute your repo.
-
-A small but important detail:
-
-I> The `CoverletOutput` path is **relative to each test project’s `.csproj`**, not to the directory you run `dotnet test` from. We’ll use that to generate a single `lcov.info` file at the **root of the repository**, which works nicely with Coverage Gutters.
-
-### 6.8.1 Generating Coverage Locally (lcov.info at Repo Root)
-
-We want `lcov.info` to end up at:
-
-```text
-digital-banking-suite/
-  lcov.info
-```
-
-We can achieve that by telling Coverlet to write `../../../lcov` from each test project folder.
-
-From the **repo root**:
+From a terminal at the **repo root** (`digital-banking-suite`):
 
 ```bash
-cd digital-banking-suite
+dotnet tool install --global dotnet-reportgenerator-globaltool
+```
 
-dotnet test src/backend/BankingSuite.Backend.sln \
-  /p:CollectCoverage=true \
-  /p:CoverletOutput=../../../lcov \
+Verify:
+
+```bash
+reportgenerator -h
+```
+
+If the command is not found, ensure your `~/.dotnet/tools` is on your `PATH`.
+
+> In CI, we’ll also install this tool using `dotnet tool install --global`.
+
+---
+
+## 6.7 Run tests with coverage locally
+
+We’ll use the `coverlet.msbuild` integration via `dotnet test`.
+
+From the **repo root** (`digital-banking-suite`):
+
+```bash
+dotnet test src/backend/BankingSuite.Backend.sln ^
+  /p:CollectCoverage=true ^
+  /p:CoverletOutput=../../lcov ^
   /p:CoverletOutputFormat=lcov
 ```
 
-Why `../../../lcov`?
+> On Linux/macOS, replace `^` with `\` for line continuation.
 
-- Our test project lives at: `src/backend/BuildingBlocks.UnitTests/BuildingBlocks.UnitTests.csproj`
-- From that folder:
-  - `..` → `src/backend`
-  - `../..` → `src`
-  - `../../..` → `digital-banking-suite` (repo root)
+Explanation:
 
-So `../../../lcov` becomes:
+- `CollectCoverage=true` tells Coverlet to instrument the code.
+- `CoverletOutput=../../lcov` will (for our layout) generate an `lcov.info` file at the repository root.
+- `CoverletOutputFormat=lcov` uses the `lcov` format, which we’ll feed to `ReportGenerator`.
 
-```text
-digital-banking-suite/lcov.info
-```
+After this command succeeds, you should see `lcov.info` in the root of `digital-banking-suite`.
 
-Later, when you add more test projects (e.g. `AccountService.UnitTests`), you can use the same relative path and they’ll all write/merge into the same `lcov.info` at the root.
-
-### 6.8.2 Showing Line Coverage with Coverage Gutters
-
-Coverage Gutters, by default, looks for a file named `lcov.info` (among others) in your workspace.
-
-Now that you have `digital-banking-suite/lcov.info`:
-
-1. Make sure the folder open as your workspace in VS Code is **`digital-banking-suite`**.
-2. Open a file you care about, for example:  
-   `src/backend/BuildingBlocks/Result.cs`
-3. Press `Ctrl+Shift+P` → **Coverage Gutters: Watch** (or **Coverage Gutters: Display Coverage**).
-
-Coverage Gutters will automatically detect `lcov.info` at the root and show:
-
-- Green lines — covered by tests.
-- Red lines — not covered.
-
-Whenever you change tests or code:
-
-- Re-run the `dotnet test ... /p:CollectCoverage=true ...` command.
-- Coverage Gutters (in Watch mode) will refresh the markers.
-  ![alt text](image-2.png)
-
-### 6.8.3 Viewing a Full HTML Coverage Report Inside VS Code
-
-Line markers are useful, but sometimes you want **percentages per file/class/namespace**.
-
-We’ll use:
-
-- **ReportGenerator** to turn `lcov.info` into HTML.
-- **HTML Preview** (extension by **George Oliveira**) to view `index.html` inside VS Code.
-
-#### Step 1 — Install ReportGenerator
-
-Install the .NET global tool (once per machine):
+Now generate an HTML report:
 
 ```bash
-dotnet tool install -g dotnet-reportgenerator-globaltool
+reportgenerator ^
+  -reports:lcov.info ^
+  -targetdir:src/backend/coverage-report ^
+  "-reporttypes:Html;TextSummary"
 ```
 
-#### Step 2 — Generate an HTML report
-
-We’ll read from the root-level `lcov.info` and write the report under `src/backend/coverage-report`.
-
-From the backend folder:
+On Linux/macOS:
 
 ```bash
-cd digital-banking-suite
-
 reportgenerator \
   -reports:lcov.info \
   -targetdir:src/backend/coverage-report \
   "-reporttypes:Html;TextSummary"
 ```
 
-This creates:
+This will:
 
-```text
-src/backend/
-  coverage-report/
-    index.html
-    Summary.txt
-    ...
-```
+- Create `src/backend/coverage-report/index.html` (and related files).
+- Print a **TextSummary** to the console (including overall line coverage).
 
-#### Step 3 — View the report with HTML Preview (George Oliveira)
+Open `src/backend/coverage-report/index.html` in your browser to explore coverage per project, namespace and class.
 
-1. In VS Code, install the extension:  
-   **“HTML Preview” by George Oliveira**.
-2. In the Explorer, navigate to:  
-   `src/backend/coverage-report/index.html`
-3. Press `Ctrl + Shift + V`.
-
-You’ll see a full coverage dashboard:
-
-- Overall coverage percentage.
-- Coverage per assembly, namespace, and class.
-- Progress bars and color indicators.
-
-All **inside VS Code**, no external browser needed.
-![alt text](image-1.png)
-
-### 6.8.4 Ignoring Coverage Artifacts in Git
-
-Coverage files and reports are **generated artifacts**. You don’t want them in your repository.
-
-At the root of your repo, update `.gitignore` to include:
-
-```text
-# Test / coverage outputs
-TestResults/
-coverage-report/
-coverage.info
-lcov.info
-coverage.cobertura.xml
-```
-
-T> It’s a good practice to **never commit coverage outputs**. They change constantly and are specific to each run. Instead, regenerate them locally or download them from CI artifacts when needed.
+> As we add more tests and microservices, this report becomes much more interesting.
 
 ---
 
-## 6.9 Updating CI to Run Backend Tests with Coverage
+## 6.8 Add backend tests workflow in GitHub Actions
 
-In previous chapters, CI was responsible for:
+Now we’ll add a CI workflow that runs on pushes/PRs and:
 
-- Restoring backend projects.
-- Building `BankingSuite.Backend.sln`.
-- Running tests.
+- Restores dependencies
+- Builds the backend solution
+- Runs tests with coverage
+- Generates an HTML coverage report
+- Uploads the report as a build artifact
 
-Now we’ll extend it to:
+### 6.8.1 Create the workflow folder and file
 
-1. Run tests **with coverage** (writing `lcov.info` at the repo root, just like we did locally).
-2. Generate an **HTML coverage report** with ReportGenerator.
-3. Upload the report as a **GitHub Actions artifact**.
-4. Append a **coverage summary** into the run summary.
-
-GitHub Actions uses a Linux runner by default, so the steps will look like the bash commands we used locally.
-
-Open `.github/workflows/ci.yml` and, in your backend job, update / add steps roughly like this (adapt names if your job is called differently).
-
-### 6.9.1 Running Tests with Coverage in CI
-
-We want CI to produce the same `lcov.info` file we used locally at the **repo root**:
-
-```yaml
-- name: Run backend tests with coverage
-  run: |
-    dotnet test src/backend/BankingSuite.Backend.sln \
-      /p:CollectCoverage=true \
-      /p:CoverletOutput=../../../lcov \
-      /p:CoverletOutputFormat=lcov
-```
-
-Why `../../../lcov`?
-
-- Our test project lives at: `src/backend/BuildingBlocks.UnitTests/BuildingBlocks.UnitTests.csproj`.
-- From that folder:
-  - `..` → `src/backend`
-  - `../..` → `src`
-  - `../../..` → `digital-banking-suite` (repo root).
-
-So `CoverletOutput=../../../lcov` means **each test project** will write (or merge) coverage into:
+Inside the `digital-banking-suite` folder, create:
 
 ```text
-digital-banking-suite/lcov.info
+.github/
+└─ workflows/
+   └─ backend-tests.yml
 ```
 
-which is exactly what we used for local visualization and is easy for CI + ReportGenerator to consume.
+You can:
 
-### 6.9.2 Installing ReportGenerator in CI
+- Create `.github` and `workflows` via File Explorer or terminal,
+- Then in Visual Studio 2026, right-click `workflows` → **Add → New Item…** → **Text File**, name it `backend-tests.yml`.
 
-Add a step to install the ReportGenerator tool:
+### 6.8.2 Backend tests workflow (`backend-tests.yml`)
+
+Paste the following:
 
 ```yaml
-- name: Install ReportGenerator
-  run: dotnet tool install -g dotnet-reportgenerator-globaltool
+name: Backend Tests & Coverage
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+      - feature/**
+  pull_request:
+    branches:
+      - develop
+      - main
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore dependencies
+        run: dotnet restore src/backend/BankingSuite.Backend.sln
+
+      - name: Build
+        run: dotnet build src/backend/BankingSuite.Backend.sln --no-restore
+
+      - name: Install ReportGenerator tool
+        run: dotnet tool install --global dotnet-reportgenerator-globaltool
+
+      - name: Run tests with coverage
+        run: |
+          dotnet test src/backend/BankingSuite.Backend.sln \
+            /p:CollectCoverage=true \
+            /p:CoverletOutput=../../../lcov \
+            /p:CoverletOutputFormat=lcov
+
+      - name: Generate coverage report
+        run: |
+          reportgenerator \
+            -reports:lcov.info \
+            -targetdir:src/backend/coverage-report \
+            "-reporttypes:Html;TextSummary"
+        env:
+          PATH: $PATH:~/.dotnet/tools
+
+      - name: Upload coverage report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage-report
+          path: src/backend/coverage-report
 ```
 
-On GitHub’s Ubuntu runners, `.NET` global tools are placed on the PATH and can be used directly as `reportgenerator` in later steps.
+Notes:
 
-### 6.9.3 Generating the HTML Coverage Report in CI
+- We install .NET 10 on the runner.
+- We install `reportgenerator` as a global dotnet tool.
+- `PATH` is extended so the `reportgenerator` command is found.
+- The HTML report is uploaded as an artifact named `backend-coverage-report`.
 
-Now generate the HTML + text summary report, writing it into `src/backend/coverage-report` (same place we used locally with VS Code):
-
-```yaml
-- name: Generate coverage report
-  run: |
-    reportgenerator \
-      -reports:lcov.info \
-      -targetdir:src/backend/coverage-report \
-      "-reporttypes:Html;TextSummary"
-```
-
-After this step, the runner will have:
-
-```text
-digital-banking-suite/
-  lcov.info
-  src/backend/
-    coverage-report/
-      index.html
-      Summary.txt
-      ...
-```
-
-### 6.9.4 Uploading the Coverage Report as an Artifact
-
-Now upload the `coverage-report` folder so you can download and inspect it from GitHub’s Actions UI:
-
-```yaml
-- name: Upload coverage report
-  uses: actions/upload-artifact@v4
-  with:
-    name: backend-coverage-report
-    path: src/backend/coverage-report
-```
-
-After a pipeline run, go to:
-
-- **Actions → select the run → Artifacts → backend-coverage-report**
-
-Download the zip and open `index.html` to see the full report (same UI you see locally via HTML Preview).
-
-### 6.9.5 Adding a Coverage Summary to the Run Summary
-
-ReportGenerator created a `Summary.txt` file in `src/backend/coverage-report/`.  
-We can append it to the GitHub Actions **run summary**:
-
-```yaml
-- name: Append coverage summary to job summary
-  run: |
-    echo '## Backend Code Coverage' >> $GITHUB_STEP_SUMMARY
-    echo '' >> $GITHUB_STEP_SUMMARY
-    cat src/backend/coverage-report/Summary.txt >> $GITHUB_STEP_SUMMARY
-```
-
-Now each run’s **Summary** tab will show a coverage section with overall percentages, without downloading anything.
-
-W> All of these steps should be placed **after** the “build backend solution” step. If tests fail, the coverage/report steps will fail too—and that’s what we want.
+We are **not yet enforcing** a minimum coverage threshold in CI — we’ll add stricter rules later once we have more tests. For now, we just generate the report and read the summary.
 
 ---
 
-## 6.10 Local Sanity Check Before Committing
+## 6.9 Commit and tag Chapter 06
 
-Before committing, run the whole flow locally using the **same commands** we expect CI (and you) to use regularly.
+As usual, follow the Git workflow.
 
-From the **repo root**:
+From the repo root:
 
 ```bash
-cd digital-banking-suite
-
-# 1) Build the backend solution
-dotnet build src/backend/BankingSuite.Backend.sln --configuration Release
-
-# 2) Run tests with coverage (writes lcov.info at repo root)
-dotnet test src/backend/BankingSuite.Backend.sln \
-  /p:CollectCoverage=true \
-  /p:CoverletOutput=../../../lcov \
-  /p:CoverletOutputFormat=lcov
-
-# 3) Generate HTML + text coverage report under src/backend/coverage-report
-reportgenerator \
-  -reports:lcov.info \
-  -targetdir:src/backend/coverage-report \
-  "-reporttypes:Html;TextSummary"
+git status
+git add src/backend tests .github
+git commit -m "ch06: add IAM tests, coverage and backend CI workflow"
 ```
 
-After this completes successfully, you should have:
+If you are using a feature branch (recommended):
 
-```text
-digital-banking-suite/
-  lcov.info
-  src/backend/
-    coverage-report/
-      index.html
-      Summary.txt
-      ...
+```bash
+git push -u origin feature/ch06-backend-tests
 ```
 
-You can now:
+Create a PR into `develop`, review and merge it.
 
-- Open `src/backend/coverage-report/index.html` in VS Code using the **HTML Preview** extension.
-- Use **Coverage Gutters** with `lcov.info` at the repo root to see inline coverage in the editor.
+Then tag the state for this chapter:
 
-If all commands succeed and tests pass, you’re ready to commit.
+```bash
+git checkout develop
+git pull
+
+git tag -a chapter-06-backend-tests-ci -m "Chapter 06: backend tests, coverage and CI"
+git push origin chapter-06-backend-tests-ci
+```
+
+Now you and readers can always restore the repo to the exact state at the end of this chapter.
 
 ---
 
-## 6.11 Wrap-up: PR, CI & Merge to `develop`
+## 6.10 Sanity checklist
 
-At this point you should have, on the branch  
-`feature/ch06-backend-testing-foundations`:
+Before moving on, confirm:
 
-- A new test project: `BuildingBlocks.UnitTests`.
-- Tests for:
-  - `Result` / `Result<T>`
-  - `ValueObject` equality (with `TestMoney`)
-  - `Entity` equality (with `TestEntity`, optional but recommended)
-- `BuildingBlocks.UnitTests` added to `BankingSuite.Backend.sln`.
-- Local coverage visualization wired up:
-  - `dotnet test` with Coverlet writing `lcov.info` at the **repo root**.
-  - Coverage Gutters for inline coverage in VS Code.
-  - ReportGenerator + HTML Preview for HTML reports under `src/backend/coverage-report`.
-- CI updated to:
-  - Run backend tests with coverage using the same `../../../lcov` pattern.
-  - Generate HTML + text coverage reports into `src/backend/coverage-report`.
-  - Upload the coverage report as a **GitHub Actions artifact**.
-  - Attach a coverage summary to the GitHub Actions run summary.
-- This chapter’s markdown (if you keep docs in the repo).
+- [x] `BankingSuite.IamService.UnitTests` and `BankingSuite.IamService.IntegrationTests` exist under `tests/`.
+- [x] Tests run successfully in **Visual Studio 2026**.
+- [x] `dotnet test ... /p:CollectCoverage=true ...` succeeds from the command line.
+- [x] `lcov.info` is generated and `reportgenerator` produces `src/backend/coverage-report/index.html`.
+- [x] The **GitHub Actions** workflow (`backend-tests.yml`) runs on pushes/PRs to `develop` and uploads the coverage artifact.
 
-Now we finish the Git workflow for the chapter.
+If everything looks good, your backend foundation is now:
 
-### 6.11.1 Committing Your Changes
-
-Stage and commit your work in logical chunks. For example:
-
-```bash
-# Backend tests for building blocks
-git add src/backend/BuildingBlocks.UnitTests/*
-git add src/backend/BuildingBlocks.UnitTests/BuildingBlocks.UnitTests.csproj
-git commit -m "test(building-blocks): add unit tests for Result, ValueObject and Entity"
-
-# CI pipeline updates (tests + coverage + report)
-git add .github/workflows/ci.yml
-git commit -m "chore(ci): run backend tests with coverage and publish report"
-
-# Git ignore updates (if you added coverage-related patterns)
-git add .gitignore
-git commit -m "chore(gitignore): ignore coverage artifacts and reports"
-
-# Documentation for this chapter
-git add docs/07-backend-testing-foundations.md
-git commit -m "docs(ch06): document backend testing and coverage visualization"
-```
-
-T> Do **not** add `lcov.info` or `src/backend/coverage-report/` to Git. They should be ignored as generated artifacts.
-
-### 6.11.2 Pushing and Opening a Pull Request
-
-Push the branch to GitHub:
-
-```bash
-git push -u origin feature/ch06-backend-testing-foundations
-```
-
-Then, in GitHub:
-
-1. Open a Pull Request from  
-   `feature/ch06-backend-testing-foundations` → `develop`
-2. Give it a clear title, for example:  
-   **"Chapter 6 – Backend Testing Foundations"**
-3. Briefly describe what this PR adds:
-   - `BuildingBlocks.UnitTests` project
-   - Unit tests for `Result`, `ValueObject`, and `Entity`
-   - Local coverage visualization (Coverage Gutters + HTML Preview)
-   - CI coverage report + artifact + summary
-   - Chapter 6 documentation
-
-### 6.11.3 Watching the CI Pipeline
-
-When you open the PR, the CI workflow should:
-
-- Restore all backend projects.
-- Build `src/backend/BankingSuite.Backend.sln`.
-- Run `dotnet test` with coverage (producing `lcov.info` at the repo root).
-- Generate coverage reports into `src/backend/coverage-report`.
-- Upload a `backend-coverage-report` artifact.
-- Append the coverage summary to the run summary.
-
-If any test fails, or coverage generation fails, the pipeline will be red. Fix the issue locally, push again, and wait for CI to turn green.
-
-W> Never merge a red pipeline. Broken tests or coverage steps in `develop` are a productivity killer.
-
-### 6.11.4 Merging to `develop`
-
-Once the pipeline is green:
-
-1. Merge the PR into `develop`.
-2. Optionally delete the feature branch:
-
-   - in GitHub (Delete branch button), and/or
-   - locally:
-
-   ```bash
-   git checkout develop
-   git pull origin develop
-   git branch -d feature/ch06-backend-testing-foundations
-   ```
-
-At this point:
-
-- `develop` contains all Chapter 6 changes.
-- CI is now watching your backend with tests **and coverage** on every PR.
-- You’re ready to start the next chapter from a clean, green baseline.
+- **Tested** (unit + integration)
+- **Measurable** (coverage)
+- **CI-aware** (GitHub Actions pipeline)
 
 ---
 
-## 6.12 Summary & What’s Next
+## 6.11 What’s next
 
-In this chapter, we:
+In the next chapter we will:
 
-- Defined a **testing strategy** for the backend:
-  - Unit tests first, integration tests later.
-- Created a `BuildingBlocks.UnitTests` project using xUnit.
-- Added **unit tests** for:
-  - `Result` / `Result<T>` success and failure.
-  - `ValueObject` equality semantics (using a test `TestMoney` value object).
-  - Entity equality (using `TestEntity`).
-- Added the test project to `BankingSuite.Backend.sln`.
-- Wired up **coverage visualization locally**:
-  - `dotnet test` with Coverlet to produce `coverage.info`.
-  - Coverage Gutters to show inline coverage in VS Code.
-  - ReportGenerator + HTML Preview to view HTML coverage reports inside VS Code.
-- Extended CI to:
-  - Run backend tests with coverage.
-  - Generate HTML + text coverage reports.
-  - Upload coverage as an artifact.
-  - Attach a coverage summary to the GitHub Actions run.
+- Finalise the **backend structure and building blocks**
+- Start implementing the **IAM service** properly:
+  - Identity models
+  - ASP.NET Core Identity setup
+  - EF Core mappings and migrations
+  - Real endpoints for registration, login, user management
 
-From now on:
+From this point on, every backend feature we add will:
 
-- Any change that breaks `Result`, `ValueObject`, or `Entity` will be caught by tests and CI.
-- You and your team can **see coverage** both locally and in GitHub.
-- Future services (IAM, Customer, Account, Transaction) will build on top of a **tested and observable foundation**.
+- Have tests
+- Participate in coverage
+- Be validated automatically by our CI pipeline
 
-In the next chapter, we’ll start moving closer to the **real banking domain**:
-
-- Design and implement the first real bounded context as code — most likely **IAMService** or **CustomerService** foundations.
-- Use the building blocks and testing patterns we’ve created here.
-- Continue evolving CI, Docker, and our solution structure as we add real behavior.
-
-Your backend now has **both structure and tests and coverage**.  
-It’s no longer just “compiles”; it’s **actively protected** and **measured**.
+Exactly the behaviour we want in a **real banking team**.

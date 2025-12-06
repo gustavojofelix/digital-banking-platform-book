@@ -1,560 +1,490 @@
-# Chapter 3 — Development Environment, Repository Setup & Branch Strategy
+# Chapter 03 — Development Environment, Repository Setup & Branch Strategy
 
-In the previous chapters, you designed the **vision** and **domain architecture** for the Banking Suite.  
-In this chapter, we make everything concrete on your machine:
+In Chapters 01–02 we defined the **vision** and **domain architecture** for Alvor Bank – Banking Suite.
 
-- Install the core tools (.NET 9, Node.js, Angular, Nx, Docker, Git)
-- Create the **main GitHub repository** for the Banking Suite
-- Define a **branch strategy** you’ll use throughout the book
-- Establish **coding standards & commit conventions**
-- Add simple **developer onboarding scripts** so new team members can get started quickly
+Now it’s time to prepare our **development environment** and create the **main source-code repository** where all backend, frontend and infrastructure code will live.
 
-By the end of this chapter, you’ll have a working project skeleton with version control, agreed rules, and a repeatable setup — just like a real team would.
+By the end of this chapter you will have:
+
+- All core tools installed and verified (`.NET 10`, `Angular 21`, `Nx`, `Node`, `Git`, `Docker`).
+- A clean **folder structure** for the project.
+- A **GitHub repository** called `digital-banking-suite` initialised and pushed.
+- A **branch strategy** (`main`, `develop`, `feature/chXX-*`) that we will use in every chapter.
+- The first **Git tag** representing the state of the repo at the end of this chapter.
+
+From the next chapters onward we will start adding real code into this structure.
 
 ---
 
-## 3.1 Chapter Goals
+## 3.1 Tools you need
 
-After this chapter, you should:
+Make sure you have the following tools installed before you proceed.
 
-- Have all required tools installed and verified.
-- Have a **GitHub repository** created and linked to your local clone.
-- Have a **base folder structure** for the Banking Suite.
-- Understand and apply a **lightweight Git workflow** (`main`, `develop`, `feature/*`).
-- Use consistent **coding standards and commit messages** from day one.
-- Be able to run a **single onboarding script** to prepare the environment.
+We don’t go into OS-specific installation steps here; follow the official documentation for your platform, then use the commands below to verify.
 
-You won’t write much domain logic yet — this chapter is about building a foundation you can trust as the system grows.
+### 3.1.1 .NET 10 SDK
 
-## 3.2 Tooling Checklist
+Install the **.NET 10 SDK** (for example `10.0.100` or higher).
 
-Before creating the repository, install the following tools in the **same major versions** used in this book.  
-Newer _patch_ versions (for example `9.0.302` instead of `9.0.301`) are usually fine, but try to stay on the same major line.
-
-### Required tools and versions
-
-- **.NET 9 SDK — 9.0.301**
-
-  - Download: <https://dotnet.microsoft.com/en-us/download/dotnet/9.0>
-
-- **Node.js — 24.11.1 (LTS)**
-
-  - Download: <https://nodejs.org/en>
-  - Make sure you choose the **LTS** build, not the “Current” release.
-
-- **Angular CLI — 21.0.1**
-
-  - Install globally after Node.js is installed:
-    ```bash
-    npm install -g @angular/cli@21.0.1
-    ```
-
-- **Nx CLI — 21.5.1**
-
-  - Install globally:
-    ```bash
-    npm install -g nx@21.5.1
-    ```
-
-- **Docker Desktop — tested with 4.41.x (or newer stable)**
-
-  - Download for your OS: <https://docs.docker.com/get-started/introduction/get-docker-desktop/>
-
-- **Git — 2.52.0**
-
-  - Download: <https://git-scm.com/downloads>
-
-- **Editor / IDE**
-  - Any modern editor works; examples in this book use **Visual Studio Code** and **JetBrains Rider**.
-
-### Verifying your installation
-
-After installing everything, open a terminal (PowerShell, bash, etc.) and run:
+Verify:
 
 ```bash
 dotnet --version
-node --version
-npm --version
-ng version
-nx --version
-git --version
-docker --version
 ```
 
-## 3.3 Creating the Banking Suite Repository
+You should see something like:
 
-In this section, we’ll create the GitHub repository that will hold all source code for the **Digital Banking Suite**.  
-This is the repo you’ll use for the rest of the book.
+```text
+10.0.100
+```
 
-We’ll:
-
-- Create a new empty repository on GitHub.
-- Initialize a local repository and connect it to GitHub.
-- Add a minimal `README.md` so the repo is not empty.
-
-You can choose any name you like; in this chapter we’ll assume:
-
-- Repository name: `digital-banking-suite`
-
-### 3.3.1 Create the GitHub Repository
-
-1. Go to GitHub and click **New repository**.
-2. Set:
-   - **Repository name:** `digital-banking-suite`
-   - **Visibility:** public or private (your choice)
-3. Leave the options for README, `.gitignore`, and license **unchecked**.
-4. After the repo is created, copy the repository URL (SSH or HTTPS), for example:
-   - `git@github.com:your-username/digital-banking-suite.git`
-   - or `https://github.com/your-username/digital-banking-suite.git`
-
-### 3.3.2 Initialize the Local Repository
-
-Choose a parent folder on your machine (for example `C:\dev` or `~/dev`) and run:
+Also check basic runtime info:
 
 ```bash
+dotnet --info
+```
+
+We will target the `net10.0` framework in all backend projects.
+
+---
+
+### 3.1.2 Node.js and npm
+
+Install a recent **Node.js LTS** (for Angular 21, Node 20 LTS is a good baseline).
+
+Verify:
+
+```bash
+node -v
+npm -v
+```
+
+Expected output (your exact versions may differ):
+
+```text
+v20.x.x
+10.x.x
+```
+
+---
+
+### 3.1.3 Angular CLI 21
+
+Install **Angular CLI 21** globally (or use `npx` later if you prefer local tools).
+
+```bash
+npm install -g @angular/cli@21
+```
+
+Verify:
+
+```bash
+ng version
+```
+
+Make sure the global Angular CLI version shows `21.x.x`.
+
+---
+
+### 3.1.4 Nx CLI
+
+We’ll use **Nx** to manage the Angular monorepo.
+
+Install Nx globally:
+
+```bash
+npm install -g nx
+```
+
+Verify:
+
+```bash
+nx --version
+```
+
+You should see a recent Nx version (e.g. `20.x.x` or similar).
+
+---
+
+### 3.1.5 Git
+
+We’ll use **Git** for version control and **GitHub** as the remote.
+
+Verify:
+
+```bash
+git --version
+```
+
+You should see something like:
+
+```text
+git version 2.x.x
+```
+
+---
+
+### 3.1.6 Docker
+
+We’ll run PostgreSQL, RabbitMQ and all microservices in **Docker containers**.
+
+Install **Docker Desktop** (on Windows/macOS) or Docker Engine (on Linux).
+
+Verify:
+
+```bash
+docker --version
+docker compose version
+```
+
+Make sure both commands succeed.
+
+---
+
+### 3.1.7 IDEs and tools
+
+You’ll need at least one of:
+
+- **Visual Studio 2026** (or latest Visual Studio) with:
+  - .NET development workload
+  - Docker tools
+- **VS Code** with:
+  - C# extension (for .NET 10)
+  - Angular/TypeScript extensions
+  - Docker extension
+
+And optionally:
+
+- **Postman** (or equivalent HTTP client) — for manual and automated API testing later.
+
+---
+
+## 3.2 Repository strategy
+
+We’ll use **separate repositories** for the **book** and the **code**:
+
+1. **Book repository**
+
+   - Contains this manuscript in Markdown and any diagrams.
+   - You might call it `digital-banking-suite-book` or similar.
+
+2. **Main source-code repository**
+
+   - Contains all backend, frontend, infrastructure and tests.
+   - We’ll call it `digital-banking-suite` throughout the book.
+
+3. **Chapter snapshots (tags)**
+   - Instead of many permanent feature branches, we’ll use **Git tags** like `chapter-03-env-and-repo`, `chapter-07-iam-backend`, etc.
+   - This lets you (and readers) check out the exact repo state at the end of each chapter.
+
+In this chapter we focus on the **main source-code repository**.
+
+---
+
+## 3.3 Creating the main source-code repository
+
+Choose a folder where you keep your development projects, for example:
+
+```text
+C:\Projects\Alvordev\
+~/Projects/
+```
+
+Create and initialise the main repo:
+
+```bash
+cd /path/to/your/projects
+
 mkdir digital-banking-suite
 cd digital-banking-suite
-git init -b main
-git remote add origin <your-repo-url>
+
+git init
 ```
 
-- `git init -b main` initializes a new Git repo with `main` as the default branch.
-- `git remote add origin ...` tells Git where your GitHub repository lives.
+> Throughout the book we’ll assume the root path is `digital-banking-suite/`.
 
-Next, create a minimal `README.md` so the repository isn’t empty:
+---
 
-```bash
-echo "# Digital Banking Suite" > README.md
-```
+## 3.4 Initial folder structure
 
-Stage, commit, and push the file:
+Create a minimal folder structure to keep backend, frontend and infrastructure organised.
 
-```bash
-git add README.md
-git commit -m "chore: initial repository"
-git push -u origin main
-```
-
-At this point you have:
-
-- A `main` branch on GitHub containing a basic README.
-- A local clone wired to that remote.
-- A clean starting point for the rest of the chapter.
-
-## 3.4 Base Folder Structure
-
-Before we add any services, we set up a **high-level structure** that will grow with the platform.
-
-From the root of `digital-banking-suite`, create this structure:
+From the `digital-banking-suite` root:
 
 ```bash
 mkdir -p src/backend
 mkdir -p src/frontend
 mkdir -p infra
-mkdir -p scripts
-mkdir -p docs
-mkdir -p .github/workflows
+mkdir -p tests
+mkdir -p postman
 ```
 
-Your folder tree should now look like:
+Your tree now looks like:
 
 ```text
 digital-banking-suite/
-  README.md
-  src/
-    backend/
-    frontend/
-  infra/
-  scripts/
-  docs/
-  .github/
-    workflows/
+├─ src/
+│  ├─ backend/
+│  └─ frontend/
+├─ infra/
+├─ tests/
+└─ postman/
 ```
 
-We’ll use these folders for:
+We’ll add more subfolders as we start building microservices and frontends.
 
-- `src/backend` — .NET 9 microservices, shared libraries, and API Gateway
-- `src/frontend` — Angular + Nx workspace
-- `infra` — Docker Compose files, database/messaging definitions, infrastructure scripts
-- `scripts` — onboarding and helper scripts
-- `docs` — architecture notes, diagrams, ADRs (Architecture Decision Records)
-- `.github/workflows` — CI pipelines
+---
 
-Commit the structure:
+## 3.5 Basic repo housekeeping (.gitignore, README)
+
+Before we push anything, let’s add a basic `.gitignore` and `README.md`.
+
+### 3.5.1 .gitignore
+
+Create `.gitignore` at the root:
 
 ```bash
+touch .gitignore
+```
+
+Open it in your editor and add:
+
+```text
+# .NET build artifacts
+bin/
+obj/
+
+# Visual Studio / VS Code
+.vs/
+.vscode/
+
+# Node / Angular
+node_modules/
+dist/
+tmp/
+
+# Coverage reports
+coverage/
+**/coverage-report/
+
+# Docker
+**/*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+```
+
+We’ll add more entries later if needed (e.g., for secrets files).
+
+---
+
+### 3.5.2 README.md
+
+Create a simple `README.md`:
+
+```bash
+touch README.md
+```
+
+Add:
+
+```markdown
+# Alvor Bank – Banking Suite
+
+This repository contains the source code for **Alvor Bank – Banking Suite**, the sample system built in the book:
+
+> **Build a Real Digital Bank: Banking Suite with .NET 10 & Angular 21**
+
+Tech stack:
+
+- .NET 10, C# 14
+- ASP.NET Core microservices with Clean Architecture and DDD
+- Angular 21 + Nx monorepo (back-office and customer portals)
+- PostgreSQL, RabbitMQ, Docker
+- GitHub Actions for CI/CD
+
+Folder layout:
+
+- `src/backend` – backend services (IAM, Customer, Account, Transaction, Notification)
+- `src/frontend` – Angular 21 + Nx workspace
+- `infra` – docker-compose and infrastructure scripts
+- `tests` – unit, integration and API tests
+- `postman` – Postman collections and environments
+```
+
+This will evolve as we add more components.
+
+---
+
+## 3.6 Branch strategy
+
+We’ll use a **lightweight GitFlow-style** branch strategy:
+
+- `main`
+
+  - Always points to the latest **stable, tagged** version.
+  - Represents “book-complete” snapshots.
+
+- `develop`
+
+  - Integration branch where we merge chapter feature branches.
+  - CI runs here on every push and PR.
+
+- `feature/chXX-short-description`
+  - Short-lived branches per chapter or feature.
+  - Example: `feature/ch03-env-and-repo`, `feature/ch07-iam-backend`.
+
+### 3.6.1 Create `main` and `develop` branches
+
+From your `digital-banking-suite` root:
+
+```bash
+# We are currently on the default branch created by 'git init'
 git add .
-git commit -m "chore: scaffold repository structure"
-git push
+git commit -m "ch03: initial repository structure"
+
+git branch -M main
+git checkout -b develop
 ```
 
-## 3.5 Branch Strategy: main, develop, and feature branches
+Now `main` holds the very first commit, and `develop` is ready for active work.
 
-To keep the project organized, we’ll use a simple, battle-tested branching model:
+---
 
-- `main` — stable, release-ready code.
-- `develop` — integration branch for ongoing work.
-- `feature/*` — short-lived branches for specific tasks or chapters.
+## 3.7 Connecting to GitHub
 
-### 3.5.1 Create the `develop` Branch
+Create a new empty repository on GitHub called **`digital-banking-suite`** (no README, no .gitignore — we already have them locally).
 
-From your local repo:
+Then add the remote and push:
 
 ```bash
-git checkout -b develop
+git remote add origin git@github.com:<your-username>/digital-banking-suite.git
+
+# Push both main and develop
+git push -u origin main
 git push -u origin develop
 ```
 
-From now on:
-
-- You branch off `develop` to work on new features.
-- You open a Pull Request from `feature/*` → `develop`.
-- When a milestone is complete and green, you merge `develop` → `main`.
-
-### 3.5.2 Chapter-Based Feature Branches
-
-Since this is a book-based project, it’s useful to organize work by chapter:
-
-- `feature/ch03-dev-environment`
-- `feature/ch04-domain-architecture`
-- `feature/ch05-security-basics`
-- `...`
-
-For this chapter, create a branch:
-
-```bash
-git checkout develop
-git checkout -b feature/ch03-dev-environment
-```
-
-You’ll do all Chapter 3 work on this branch, then:
-
-- Commit regularly
-- Open a PR into `develop` when done
-- Merge once you’re satisfied or once all tests pass
-
-I> **Note:** Even if you’re working alone, treat yourself like a team: use branches, write PR descriptions, and keep a clean history. It pays off later.
+Replace `<your-username>` with your actual GitHub username (or the organisation name).
 
 ---
 
-## 3.6 Coding Standards & Commit Conventions
+## 3.8 Workflow per chapter
 
-Before writing serious code, we agree on how that code and history should look.
+From now on, every chapter in this book will follow a **repeatable workflow**:
 
-### 3.6.1 C# / .NET Coding Standards
+1. **Create a feature branch** from `develop`.
+2. **Make changes** (code, tests, infra) described in the chapter.
+3. **Run tests and coverage** locally (once we have projects).
+4. **Commit regularly** with meaningful messages.
+5. **Open a Pull Request** from the feature branch into `develop`.
+6. Let **CI** run and pass.
+7. **Merge** the PR.
+8. **Tag** the resulting commit to mark the chapter end state.
 
-You can evolve this over time, but here’s a good starting set:
+### 3.8.1 Creating the feature branch for this chapter
 
-- Use **PascalCase** for classes, methods, and public properties.
-- Use **camelCase** for local variables and private fields (optionally `_camelCase` for private fields).
-- Prefer **expression-bodied members** where clear, but not at the cost of readability.
-- Avoid “god classes” and static helper bags — prefer **domain-driven entities and services**.
-- Keep files focused: one class per file, unless types are tightly coupled.
+We’re already on `develop`, but let’s simulate the pattern we’ll follow from now on.
 
-Add a minimal `.editorconfig` at the repo root:
-
-```ini
-root = true
-
-[*.cs]
-indent_style = space
-indent_size = 4
-charset = utf-8-bom
-end_of_line = lf
-insert_final_newline = true
-dotnet_sort_system_directives_first = true
-dotnet_style_qualification_for_field = false
-dotnet_style_qualification_for_property = false
-dotnet_style_qualification_for_method = false
-dotnet_style_qualification_for_event = false
-```
-
-This ensures consistent formatting across editors.
-
-### 3.6.2 TypeScript / Angular Conventions
-
-- Use **TypeScript strict mode**.
-- Use **PascalCase** for components and services; **camelCase** for variables and functions.
-- Keep modules/components small and focused.
-- Use **feature-based folder structure** within the Angular workspace (we’ll set this up later).
-
-### 3.6.3 Commit Message Style (Conventional Commits)
-
-We’ll use a slightly simplified **Conventional Commits** style:
-
-- `feat:` — a new feature
-- `fix:` — a bug fix
-- `chore:` — repo/config changes (no behavior)
-- `docs:` — documentation updates
-- `test:` — adding or updating tests
-- `refactor:` — change that improves code without changing behavior
-
-Examples:
-
-```text
-feat: add base folder structure for backend services
-chore: configure editorconfig for csharp and typescript
-docs: explain branch strategy in README
-```
-
-W> **Warning:** Avoid commits like `update stuff` or `misc changes`.  
-Worse than no commit history is a **meaningless** one.
-
----
-
-## 3.7 Developer Onboarding Scripts
-
-Real projects avoid “it works on my machine” by giving new developers a **single command** that:
-
-- Checks prerequisites (or at least logs them)
-- Restores backend and frontend dependencies
-- Prepares local infrastructure (e.g., Docker Compose)
-
-We’ll start simple and evolve these scripts as the project grows.
-
-### 3.7.1 Script Layout
-
-Create two scripts in the `scripts` folder:
-
-- `scripts/bootstrap.ps1` — for Windows / PowerShell
-- `scripts/bootstrap.sh` — for macOS / Linux
-
-`scripts/bootstrap.ps1` (PowerShell)
+From `develop`:
 
 ```bash
-Write-Host "=== Digital Banking Suite: Developer Bootstrap (PowerShell) ==="
-
-Write-Host "`n[1/3] Checking basic tool availability..."
-dotnet --version
-node --version
-npm --version
-git --version
-docker --version
-
-Write-Host "`n[2/3] Restoring backend and frontend dependencies (if projects exist)..."
-
-if (Test-Path "./src/backend") {
-    Write-Host "-> Backend folder found, running dotnet restore..."
-    dotnet restore ./src/backend 2>$null
-} else {
-    Write-Host "-> Backend folder not found yet. Will be created in later chapters."
-}
-
-if (Test-Path "./src/frontend") {
-    Write-Host "-> Frontend folder found, running npm install (via Angular/Nx workspace)..."
-    Push-Location ./src/frontend
-    npm install
-    Pop-Location
-} else {
-    Write-Host "-> Frontend folder not found yet. Will be created in later chapters."
-}
-
-Write-Host "`n[3/3] Starting local infrastructure with Docker Compose (if defined)..."
-
-if (Test-Path "./infra/docker-compose.yml") {
-    docker compose -f ./infra/docker-compose.yml up -d
-} else {
-    Write-Host "-> No docker-compose.yml found yet. Infrastructure will be added later."
-}
-
-Write-Host "`nBootstrap complete. You are ready to follow the next chapters."
-
+git checkout -b feature/ch03-env-and-repo
 ```
 
-`scripts/bootstrap.sh` (bash)
+For this chapter we’ve already created the basic structure, so we just commit and merge as if we had been working on this branch from the start.
+
+Stage and commit (if there are any remaining changes):
 
 ```bash
-#!/usr/bin/env bash
-set -e
-
-echo "=== Digital Banking Suite: Developer Bootstrap (bash) ==="
-
-echo
-echo "[1/3] Checking basic tool availability..."
-dotnet --version || echo "dotnet not found"
-node --version || echo "node not found"
-npm --version || echo "npm not found"
-git --version || echo "git not found"
-docker --version || echo "docker not found"
-
-echo
-echo "[2/3] Restoring backend and frontend dependencies (if projects exist)..."
-
-if [ -d "./src/backend" ]; then
- echo "-> Backend folder found, running dotnet restore..."
- dotnet restore ./src/backend || true
-else
- echo "-> Backend folder not found yet. Will be created in later chapters."
-fi
-
-if [ -d "./src/frontend" ]; then
- echo "-> Frontend folder found, running npm install (via Angular/Nx workspace)..."
- cd ./src/frontend
- npm install || true
- cd - > /dev/null
-else
- echo "-> Frontend folder not found yet. Will be created in later chapters."
-fi
-
-echo
-echo "[3/3] Starting local infrastructure with Docker Compose (if defined)..."
-
-if [ -f "./infra/docker-compose.yml" ]; then
- docker compose -f ./infra/docker-compose.yml up -d
-else
- echo "-> No docker-compose.yml found yet. Infrastructure will be added later."
-fi
-
-echo
-echo "Bootstrap complete. You are ready to follow the next chapters."
-
-```
-
-Make the bash script executable:
-
-```bash
-chmod +x scripts/bootstrap.sh
-```
-
-From now on, a new team member can:
-
-```bash
-git clone <your-repo-url>
-cd digital-banking-suite
-./scripts/bootstrap.sh   # or: pwsh ./scripts/bootstrap.ps1
-```
-
-## 3.8 A Minimal CI Pipeline Skeleton
-
-We’ll go deep into CI/CD later, but it’s useful to wire a **very simple pipeline** now so that every PR is validated.
-
-Create `.github/workflows/ci.yml`:
-
-```yaml
-name: CI
-
-on:
-  pull_request:
-    branches: [develop]
-  push:
-    branches: [develop]
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: "9.0.x"
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "lts/*"
-
-      - name: Restore backend (if any)
-        run: |
-          if [ -d "./src/backend" ]; then
-            dotnet restore ./src/backend
-          else
-            echo "No backend projects yet."
-          fi
-
-      - name: Restore frontend (if any)
-        run: |
-          if [ -d "./src/frontend" ]; then
-            cd src/frontend
-            npm install
-          else
-            echo "No frontend workspace yet."
-          fi
-```
-
-Right now this pipeline mainly ensures:
-
-- The repo checks out correctly
-- The tools install successfully
-- Restore steps work (or are skipped gracefully)
-
-We’ll add real **build + test + lint + Docker** steps as soon as we create actual projects.
-
-Commit and push:
-
-```bash
-git add .github/workflows/ci.yml
-git commit -m "chore: add initial CI pipeline skeleton"
-git push
-```
-
-### 3.8.1 Seeing the Pipeline in Action
-
-Before we move on to the next chapter, let’s actually **see the CI pipeline run**.
-
-1. Make sure all your Chapter 3 work is committed on the feature branch:
-
-```bash
-git status
+git status        # check if anything changed
 git add .
-git commit -m "chore: finish chapter 3 setup"
+git commit -m "ch03: setup environment folders and git basics"
 ```
 
-2.  On GitHub, open a **Pull Request**:
+Push the feature branch:
 
-    - Base branch: `develop`
-    - Compare branch: `feature/ch03-dev-environment`
+```bash
+git push -u origin feature/ch03-env-and-repo
+```
 
-3.  When you create the PR, GitHub will trigger the **CI workflow** (the `ci.yml` file you added).  
-    You should see a “Checks” section appear on the PR and the workflow run.
+Then on GitHub:
 
-4.  After the CI checks are **green**, merge the PR into `develop`.
+- Open a **Pull Request** from `feature/ch03-env-and-repo` into `develop`.
+- There is not much yet, but this sets the habit early.
+- Merge the PR.
 
-5.  Following are the screenshots of the github steps to create a PR (pretty mucha self explanatory, just follow the seuence of the images, the important sections I have highleted in red square).
-
-        - On Gihub repository of your project select the `Code` tab, make sure you selcted the correct branch, in our case is `feature/ch03-dev-environment` and the click on the `Compare & pull request` green button.
-
-    ![PR Step1](pr1.png) - On the next screen make sure you select base branch `develop` and compare to `feature/ch03-dev-environment` then click on the `Create pull request` green button.
-    ![PR Step1](pr2.png) - On the next screen you will see that the pipeline was triggered and that there are no conflicts. Click on the `Merge Pull request`.
-    ![PR Step1](pr3.png) - Next step click the `Confirm merge` green button.
-    ![PR Step1](pr4.png) - Now when we go back to the reposiotry and select the `Action` tab yous should see the workflows for your pipeline running.
-    ![PR Step1](pr5.png) - And finally you can see the details of the pipeline by clicking on the `build` step.
-    ![PR Step1](pr6.png) - And...
-    ![PR Step1](pr7.png)
-
-From now on, we’ll **keep feature branches as chapter references** instead of deleting them, for example:
-
-- `feature/ch03-dev-environment`
-- `feature/ch04-domain-architecture`
-- `feature/ch05-security-basics`
-- `...`
-
-When you’re ready to start the next chapter, create a new feature branch from `develop`, such as:
+After merging, sync `develop` locally:
 
 ```bash
 git checkout develop
 git pull
-git checkout -b feature/ch04-backend-foundation
 ```
 
-## 3.9 Summary & What’s Next
+---
 
-In this chapter, you:
+## 3.9 Tagging the chapter
 
-- Installed and verified the **core toolchain**: .NET 9, Node.js, Angular, Nx, Docker, Git.
-- Created the **main GitHub repository** and scaffolded a sensible folder structure.
-- Defined a **branching strategy** with `main`, `develop`, and `feature/*`.
-- Set up **coding standards and commit conventions** so the codebase stays consistent.
-- Added **bootstrap scripts** for easy developer onboarding.
-- Wired up a minimal **CI pipeline skeleton** that will grow with the project.
+To help readers, I will create a **Git tag** for the state of the repository at the end of this chapter.
 
-You now have a development environment and repository that feel like a real-world team setup — not just a local folder with random files.
+From `develop`:
 
-In the next chapter, we’ll start creating the **backend foundation** for our services, beginning with:
+```bash
+git tag -a chapter-03-env-and-repo -m "Chapter 03: environment, repo structure and branch strategy"
+git push origin chapter-03-env-and-repo
+```
 
-- The first .NET solution structure
-- Shared building blocks for Clean Architecture
-- The initial microservice skeletons that will host our banking domains
+Later chapters will tell readers:
+
+> “If you get stuck, you can check out tag `chapter-03-env-and-repo` to see the canonical state of the repo at the end of this chapter.”
+
+---
+
+## 3.10 Sanity checks
+
+Before moving on, run a few sanity checks to ensure all tools are available.
+
+From anywhere:
+
+```bash
+dotnet --version
+node -v
+npm -v
+ng version
+nx --version
+docker --version
+docker compose version
+git --version
+```
+
+You should now have:
+
+- A working `.NET 10` SDK.
+- Node + npm installed.
+- Angular CLI 21 and Nx CLI installed.
+- Docker available.
+- Git connected to your GitHub repo.
+
+Your `digital-banking-suite` repository is ready to host:
+
+- Backend microservices in `src/backend/`.
+- Angular 21 Nx workspace in `src/frontend/`.
+- Infrastructure (including PostgreSQL and RabbitMQ) in `infra/`.
+- Tests in `tests/`.
+- Postman collections in `postman/`.
+
+---
+
+## 3.11 What’s next
+
+In the next chapters we will:
+
+- Introduce **Docker from day one** for local infrastructure.
+- Set up **GitHub Actions CI** that runs `dotnet test`, coverage and (later) frontend builds.
+- Create the first shared **BuildingBlocks** projects in the backend.
+- Scaffold the skeleton of the **IAM service**, which will become our reference template for all other microservices.
+
+You now have the **foundation** in place: tools, repository and workflow.
+
+In Chapter 04 we’ll start putting containers and pipelines around this skeleton so that every piece of code we add later will run in a **repeatable, production-like environment**.

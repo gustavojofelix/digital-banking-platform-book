@@ -6,4 +6,8 @@
 05-docker-from-day-zero.md
 06-backend-solution-structure.md
 07-backend-testing-foundations.md
-08-final-backend-structure-and-iam-service.md
+08-00-iam-core-identity-ef-jwt-cqrs.md
+08-01-iam-admin-employee-management.md
+08-02-iam-email-confirmation-and-password-flows.md
+08-03-iam-2fa-and-security-hardening.md
+08-04-iam-integration-tests-and-coverage.md

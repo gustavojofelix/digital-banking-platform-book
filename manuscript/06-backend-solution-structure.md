@@ -1,325 +1,176 @@
-# Chapter 5 — Backend Solution Structure & Shared Building Blocks
+# Chapter 05 — Backend Solution & Clean Architecture Template (.NET 10)
 
-In the previous chapter, we containerized our first placeholder service (`AccountService.Api`) and wired it into Docker and Docker Compose.
+In the previous chapters we:
 
-In this chapter, we’ll give the backend a **proper home**:
+- Defined the **vision** and **domain architecture** for Alvor Bank – Banking Suite.
+- Created the `digital-banking-suite` repository and base folders.
+- Set up **Docker** with **PostgreSQL** and **RabbitMQ** using `infra/docker-compose.dev.yml`.
 
-- Create a **backend solution file** (`.sln`) under `src/backend`.
-- Add `AccountService.Api` to this solution.
-- Introduce a **shared building blocks project** for common patterns (entities, value objects, Result type).
-- Wire everything into CI so GitHub Actions can build the backend solution.
+Now we’ll finally create our **.NET 10 backend solution** and a reusable **Clean Architecture template** that every microservice will follow.
 
-By the end of this chapter, you will have:
+By the end of this chapter you will:
 
-- A clear **solution structure** for the backend.
-- A **`BuildingBlocks`** library ready to be reused by future microservices.
-- CI updated to restore and build your backend solution as part of every PR.
+- Have a `BankingSuite.Backend.sln` solution under `src/backend/`.
+- Have **BuildingBlocks** projects for shared abstractions: Domain, Application, Infrastructure.
+- Have an **IAM service skeleton** with Domain, Application, Infrastructure and API projects.
+- Be able to run a simple **health endpoint** from `BankingSuite.IamService.API` and see it respond.
 
----
-
-## 5.1 Git Setup for This Chapter (Feature Branch)
-
-As before, this chapter’s work lives in its own feature branch.
-
-> **Each build chapter gets its own feature branch.**  
-> We only merge back to `develop` after the chapter is complete and CI is green.
-
-For this chapter we’ll use:
-
-- Branch name: `feature/ch05-backend-structure`
-
-From your local clone:
-
-```bash
-cd digital-banking-suite
-
-# Make sure you're on develop and up to date
-git checkout develop
-git pull origin develop
-
-# Create a new branch for this chapter
-git checkout -b feature/ch05-backend-structure
-```
-
-All changes for this chapter (solution files, new projects, CI updates, docs) will happen on this branch.
-
-T> Keeping a separate branch per chapter makes it easy to review your work, roll back if needed, and see CI runs per chapter in GitHub.
+> **IDE assumption:** All file and project steps use **Visual Studio 2026**.  
+> If you’re using Rider, VS Code or another IDE, create equivalent projects and references using that environment or the `dotnet` CLI.
 
 ---
 
-## 5.2 What We’re Building in This Chapter
+## 5.1 Creating the backend solution
 
-Right now, your backend is just:
+Open **Visual Studio 2026** and make sure the folder `digital-banking-suite` is open (from Chapter 04).
 
-- A folder structure created in Chapter 3.
-- A placeholder `AccountService.Api` project created in Chapter 4.
-- Docker and docker-compose configuration.
+### 5.1.1 Add a new solution
 
-We’re missing:
+1. In **Solution Explorer**, right-click the root `digital-banking-suite` node.
+2. Choose **Add → New Project…**.
+3. Search for **“Blank Solution”**.
+4. Name it:
 
-- A **solution file** that ties backend projects together.
-- A **shared library** for reusable building blocks.
-- A CI step that **builds** the backend, not only restores dependencies.
+   - **Project name:** `BankingSuite.Backend`
+   - **Location:** `digital-banking-suite/src/backend`
 
-In this chapter, we’ll:
+5. Click **Create**.
 
-1. Create `BankingSuite.Backend.sln` under `src/backend`.
-2. Add `AccountService.Api` to that solution.
-3. Create a `BuildingBlocks` class library for shared building blocks.
-4. Implement simple, reusable base types:
-   - `Entity`
-   - `ValueObject`
-   - `Result` (for returning success/failure)
-5. Reference `BuildingBlocks` from `AccountService.Api`.
-6. Update GitHub Actions to **build the solution**.
-
-I> These building blocks are intentionally **minimal**. We’ll evolve them as we introduce real domain models and domain events later in the book.
+Visual Studio will create `src/backend/BankingSuite.Backend.sln` and show an empty solution in Solution Explorer.
 
 ---
 
-## 5.3 Creating the Backend Solution
+## 5.2 Creating BuildingBlocks projects
 
-We want a single solution file that will eventually include:
+We’ll create three shared class libraries inside a `BuildingBlocks` folder:
 
-- AccountService
-- IAMService
-- CustomerService
-- TransactionService
-- NotificationService
-- Shared libraries (e.g., BuildingBlocks)
+- `BankingSuite.BuildingBlocks.Domain`
+- `BankingSuite.BuildingBlocks.Application`
+- `BankingSuite.BuildingBlocks.Infrastructure`
 
-From the repo root:
+These will hold reusable patterns (entities, base classes, `Result` type, etc.) shared by all services.
+
+### 5.2.1 Create the `BuildingBlocks` solution folder
+
+1. In Solution Explorer, right-click the solution node **`BankingSuite.Backend`**.
+2. Choose **Add → New Solution Folder**.
+3. Name it **`BuildingBlocks`**.
+
+### 5.2.2 `BankingSuite.BuildingBlocks.Domain`
+
+1. Right-click the **`BuildingBlocks`** solution folder → **Add → New Project…**.
+2. Choose **Class Library** (`C#`, `.NET`).
+3. Name it **`BankingSuite.BuildingBlocks.Domain`**.
+4. Confirm the **Framework** is **`.NET 10.0` (`net10.0`)**.
+5. Click **Create**.
+
+Delete the default `Class1.cs` file (we’ll add our own code).
+
+### 5.2.3 `BankingSuite.BuildingBlocks.Application`
+
+Repeat:
+
+1. Right-click **`BuildingBlocks`** → **Add → New Project…**.
+2. Choose **Class Library**.
+3. Name it **`BankingSuite.BuildingBlocks.Application`**.
+4. Target **`net10.0`**.
+5. Create and delete the default `Class1.cs`.
+
+Add a project reference from **Application** to **Domain**:
+
+1. Right-click `BankingSuite.BuildingBlocks.Application` → **Add → Project Reference…**.
+2. Tick `BankingSuite.BuildingBlocks.Domain`.
+3. Click **OK**.
+
+### 5.2.4 `BankingSuite.BuildingBlocks.Infrastructure`
+
+1. Right-click **`BuildingBlocks`** → **Add → New Project…**.
+2. Choose **Class Library**.
+3. Name it **`BankingSuite.BuildingBlocks.Infrastructure`**.
+4. Target **`net10.0`**.
+5. Delete the default `Class1.cs`.
+
+Add project references:
+
+1. Right-click `BankingSuite.BuildingBlocks.Infrastructure` → **Add → Project Reference…**.
+2. Tick:
+   - `BankingSuite.BuildingBlocks.Domain`
+   - `BankingSuite.BuildingBlocks.Application`
+3. Click **OK**.
+
+Now Build the solution:
 
 ```bash
-cd digital-banking-suite
-
-# Go to backend folder
-cd src/backend
-
-# Create a new empty solution
-dotnet new sln -n BankingSuite.Backend
+dotnet build src/backend/BankingSuite.Backend.sln
 ```
 
-This will create:
-
-- `src/backend/BankingSuite.Backend.sln`
-
-At this point, your backend structure looks roughly like:
-
-```text
-src/
-  backend/
-    BankingSuite.Backend.sln
-    AccountService/
-      AccountService.Api/
-        AccountService.Api.csproj
-        Dockerfile
-        ...
-```
-
-T> We keep **one solution per logical layer**. Here it’s the backend solution. Later, you might have a separate solution for tests, or a combined solution for end-to-end builds if you prefer.
+It should succeed.
 
 ---
 
-## 5.4 Adding AccountService.Api to the Solution
+## 5.3 Adding minimal shared types to BuildingBlocks
 
-Next, we add the existing `AccountService.Api` project to `BankingSuite.Backend.sln`.
+We’ll add two simple but useful pieces to `BuildingBlocks.Domain`:
 
-Still inside `src/backend`:
+- A base **entity** type with an `Id`.
+- A functional-style **`Result`** type that represents success/failure.
 
-```bash
-cd digital-banking-suite/src/backend
+### 5.3.1 Base entity
 
-dotnet sln BankingSuite.Backend.sln add \
-  ./AccountService/AccountService.Api/AccountService.Api.csproj
-```
+In `BankingSuite.BuildingBlocks.Domain`:
 
-You can verify the solution contents with:
+1. Right-click the project → **Add → New Folder** → name it **`Abstractions`**.
+2. Right-click the `Abstractions` folder → **Add → Class…** → name it **`Entity.cs`**.
 
-```bash
-dotnet sln BankingSuite.Backend.sln list
-```
-
-You should see something like:
-
-```text
-Projects in solution 'BankingSuite.Backend.sln':
-    AccountService/AccountService.Api/AccountService.Api.csproj
-```
-
-Now you can build the backend solution locally:
-
-```bash
-dotnet build BankingSuite.Backend.sln
-```
-
-If everything is set up correctly, this should complete successfully.
-
----
-
-## 5.5 Creating the BuildingBlocks Project
-
-We’ll now add a **shared library** to hold building blocks that multiple services can reuse.
-
-From `src/backend`:
-
-```bash
-cd digital-banking-suite/src/backend
-
-# Create the BuildingBlocks class library
-dotnet new classlib \
-  -n BuildingBlocks \
-  -o BuildingBlocks
-```
-
-This creates:
-
-```text
-src/backend/
-  BankingSuite.Backend.sln
-  BuildingBlocks/
-    BuildingBlocks.csproj
-    Class1.cs
-  AccountService/
-    AccountService.Api/
-      AccountService.Api.csproj
-```
-
-Now add `BuildingBlocks` to the solution:
-
-```bash
-dotnet sln BankingSuite.Backend.sln add ./BuildingBlocks/BuildingBlocks.csproj
-```
-
-We don’t need `Class1.cs`, so remove it:
-
-```bash
-rm BuildingBlocks/Class1.cs
-```
-
----
-
-## 5.6 Implementing Shared Building Blocks
-
-We’ll add three simple, reusable base types:
-
-- `Entity` – base class for entities with an `Id`.
-- `ValueObject` – base class for value objects with proper equality semantics.
-- `Result` – a simple success/failure wrapper with an optional error message.
-
-These are intentionally small but powerful. They’ll be used heavily when we start modeling real domain logic.
-
-### 5.6.1 The `Entity` Base Class
-
-Create `src/backend/BuildingBlocks/Entity.cs`:
+Replace its content with:
 
 ```csharp
-namespace BuildingBlocks;
+namespace BankingSuite.BuildingBlocks.Domain.Abstractions;
 
-public abstract class Entity
+public abstract class Entity<TId>
 {
-    public Guid Id { get; protected set; }
+    public TId Id { get; protected set; }
 
-    protected Entity()
+    protected Entity(TId id)
     {
-        Id = Guid.NewGuid();
+        Id = id;
     }
 
-    protected Entity(Guid id)
-    {
-        Id = id == Guid.Empty ? Guid.NewGuid() : id;
-    }
+    protected Entity() { }
 
     public override bool Equals(object? obj)
     {
-        if (obj is not Entity other)
+        if (obj is not Entity<TId> other)
             return false;
 
         if (ReferenceEquals(this, other))
             return true;
 
-        if (GetType() != other.GetType())
+        if (Equals(Id, default(TId)) || Equals(other.Id, default(TId)))
             return false;
 
-        return Id.Equals(other.Id);
+        return Id!.Equals(other.Id);
     }
 
-    public static bool operator ==(Entity? a, Entity? b)
+    public static bool operator ==(Entity<TId>? a, Entity<TId>? b)
     {
-        if (a is null && b is null)
-            return true;
-
-        if (a is null || b is null)
-            return false;
-
+        if (a is null && b is null) return true;
+        if (a is null || b is null) return false;
         return a.Equals(b);
     }
 
-    public static bool operator !=(Entity? a, Entity? b) => !(a == b);
+    public static bool operator !=(Entity<TId>? a, Entity<TId>? b) => !(a == b);
 
-    public override int GetHashCode() => Id.GetHashCode();
+    public override int GetHashCode() => Id?.GetHashCode() ?? 0;
 }
 ```
 
-T> Later, specific aggregates like `Account`, `Customer`, and `Transaction` will inherit from `Entity`.
+### 5.3.2 Result type
 
-### 5.6.2 The `ValueObject` Base Class
-
-Create `src/backend/BuildingBlocks/ValueObject.cs`:
+Still in `BankingSuite.BuildingBlocks.Domain/Abstractions`, add another class **`Result.cs`**:
 
 ```csharp
-namespace BuildingBlocks;
-
-public abstract class ValueObject
-{
-    protected abstract IEnumerable<object?> GetEqualityComponents();
-
-    public override bool Equals(object? obj)
-    {
-        if (obj is null || obj.GetType() != GetType())
-            return false;
-
-        var other = (ValueObject)obj;
-
-        return GetEqualityComponents()
-            .SequenceEqual(other.GetEqualityComponents());
-    }
-
-    public override int GetHashCode()
-    {
-        return GetEqualityComponents()
-            .Aggregate(1, (current, obj) =>
-            {
-                unchecked
-                {
-                    return current * 23 + (obj?.GetHashCode() ?? 0);
-                }
-            });
-    }
-
-    public static bool operator ==(ValueObject? a, ValueObject? b)
-    {
-        if (a is null && b is null)
-            return true;
-
-        if (a is null || b is null)
-            return false;
-
-        return a.Equals(b);
-    }
-
-    public static bool operator !=(ValueObject? a, ValueObject? b) => !(a == b);
-}
-```
-
-T> A `Money` type, or an `Address` type, is a good example of a value object we’ll create later.
-
-### 5.6.3 The `Result` Type
-
-Create `src/backend/BuildingBlocks/Result.cs`:
-
-```csharp
-namespace BuildingBlocks;
+namespace BankingSuite.BuildingBlocks.Domain.Abstractions;
 
 public class Result
 {
@@ -329,19 +180,18 @@ public class Result
 
     protected Result(bool isSuccess, string? error)
     {
-        if (isSuccess && error is not null)
-            throw new InvalidOperationException("Successful result cannot have an error.");
-
-        if (!isSuccess && string.IsNullOrWhiteSpace(error))
-            throw new InvalidOperationException("Failure result must have an error message.");
-
         IsSuccess = isSuccess;
         Error = error;
     }
 
-    public static Result Success() => new Result(true, null);
+    public static Result Success() => new(true, null);
 
-    public static Result Failure(string error) => new Result(false, error);
+    public static Result Failure(string error) =>
+        new(false, error);
+
+    public static Result<T> Success<T>(T value) => Result<T>.Success(value);
+
+    public static Result<T> Failure<T>(string error) => Result<T>.Failure(error);
 }
 
 public class Result<T> : Result
@@ -355,235 +205,300 @@ public class Result<T> : Result
     }
 
     public static Result<T> Success(T value) =>
-        new Result<T>(true, value, null);
+        new(true, value, null);
 
-    public static new Result<T> Failure(string error) =>
-        new Result<T>(false, default, error);
+    public new static Result<T> Failure(string error) =>
+        new(false, default, error);
 }
 ```
 
-This will allow us to write domain logic like:
+We’ll use `Result` everywhere in the application and domain layers to avoid throwing exceptions for normal control flow.
+
+Build again to ensure everything compiles:
+
+```bash
+dotnet build src/backend/BankingSuite.Backend.sln
+```
+
+---
+
+## 5.4 Creating the IAM service skeleton
+
+IAM will be our **first real microservice** and the template for others.  
+We’ll create four projects under a `Services/IamService` solution folder:
+
+- `BankingSuite.IamService.Domain`
+- `BankingSuite.IamService.Application`
+- `BankingSuite.IamService.Infrastructure`
+- `BankingSuite.IamService.API` (the actual HTTP service)
+
+### 5.4.1 Add the `Services` solution folder
+
+1. In Solution Explorer, right-click the solution `BankingSuite.Backend`.
+2. Choose **Add → New Solution Folder**.
+3. Name it **`Services`**.
+
+Inside `Services`, add another solution folder **`IamService`**.
+
+### 5.4.2 IAM Domain project
+
+1. Right-click **`IamService`** solution folder → **Add → New Project…**.
+2. Choose **Class Library**.
+3. Name it **`BankingSuite.IamService.Domain`**.
+4. Target **`.NET 10.0`**.
+5. Delete `Class1.cs`.
+
+Add a reference to `BuildingBlocks.Domain`:
+
+1. Right-click `BankingSuite.IamService.Domain` → **Add → Project Reference…**.
+2. Tick `BankingSuite.BuildingBlocks.Domain`.
+3. Click **OK**.
+
+### 5.4.3 IAM Application project
+
+1. Right-click **`IamService`** → **Add → New Project…**.
+2. Choose **Class Library**.
+3. Name it **`BankingSuite.IamService.Application`**.
+4. Target **`net10.0`**.
+5. Delete `Class1.cs`.
+
+Add project references:
+
+1. Right-click `BankingSuite.IamService.Application` → **Add → Project Reference…**.
+2. Tick:
+   - `BankingSuite.BuildingBlocks.Application`
+   - `BankingSuite.BuildingBlocks.Domain`
+   - `BankingSuite.IamService.Domain`
+3. Click **OK**.
+
+### 5.4.4 IAM Infrastructure project
+
+1. Right-click **`IamService`** → **Add → New Project…**.
+2. Choose **Class Library**.
+3. Name it **`BankingSuite.IamService.Infrastructure`**.
+4. Target **`net10.0`**.
+5. Delete `Class1.cs`.
+
+Add project references:
+
+1. Right-click `BankingSuite.IamService.Infrastructure` → **Add → Project Reference…**.
+2. Tick:
+   - `BankingSuite.BuildingBlocks.Infrastructure`
+   - `BankingSuite.BuildingBlocks.Application`
+   - `BankingSuite.BuildingBlocks.Domain`
+   - `BankingSuite.IamService.Application`
+   - `BankingSuite.IamService.Domain`
+3. Click **OK**.
+
+We’ll later add NuGet packages (EF Core, Identity, MassTransit) to this project.
+
+### 5.4.5 IAM API project (FastEndpoints)
+
+1. Right-click **`IamService`** → **Add → New Project…**.
+2. Choose **ASP.NET Core Empty** or **ASP.NET Core Web API** (we will strip it down).
+3. Name it **`BankingSuite.IamService.API`**.
+4. Target **`net10.0`**.
+5. Ensure **Use controllers** is unchecked if you choose Web API template (we’ll use **FastEndpoints** / minimal hosting).
+
+Add project references:
+
+1. Right-click `BankingSuite.IamService.API` → **Add → Project Reference…**.
+2. Tick:
+   - `BankingSuite.IamService.Infrastructure`
+   - `BankingSuite.IamService.Application`
+   - `BankingSuite.IamService.Domain`
+3. Click **OK**.
+
+Next, add NuGet packages we’ll need for this chapter:
+
+- `FastEndpoints` (for our endpoint framework)
+- `FastEndpoints.Swagger` (for Swagger UI)
+
+Right-click `BankingSuite.IamService.API` → **Manage NuGet Packages…** and install:
+
+```text
+FastEndpoints
+FastEndpoints.Swagger
+```
+
+(We’ll add Identity, EF Core and others in Chapter 07 when we fully implement IAM.)
+
+---
+
+## 5.5 Wiring a minimal IAM API with a health endpoint
+
+We’ll now change `Program.cs` in `BankingSuite.IamService.API` to:
+
+- Use FastEndpoints.
+- Expose a simple `/health` endpoint returning the service name.
+- Be ready for Dependency Injection configuration later.
+
+Open `Program.cs` and replace its content with:
 
 ```csharp
-Result<Account> result = Account.Open(...);
+using FastEndpoints;
 
-if (result.IsFailure)
+var builder = WebApplication.CreateBuilder(args);
+
+// Add FastEndpoints
+builder.Services.AddFastEndpoints();
+
+// Add Swagger for FastEndpoints
+builder.Services.AddSwaggerDoc(config =>
 {
-    // handle error
+    config.Title = "Alvor Bank - IAM Service";
+    config.Version = "v1";
+});
+
+var app = builder.Build();
+
+app.UseFastEndpoints();
+
+// Enable Swagger UI in development
+if (app.Environment.IsDevelopment())
+{
+    app.UseOpenApi();
+    app.UseSwaggerUi3(settings =>
+    {
+        settings.Path = "/swagger";
+        settings.DocumentPath = "/swagger/v1/swagger.json";
+    });
+}
+
+// Minimal health endpoint (no auth yet)
+app.MapGet("/health", () => Results.Ok(new
+{
+    Service = "IamService",
+    Status = "Healthy",
+    TimestampUtc = DateTime.UtcNow
+}));
+
+app.Run();
+```
+
+### 5.5.1 Add a simple launch profile
+
+Ensure the IAM API launches on a stable port (we’ll integrate it into Docker later).
+
+Open `Properties/launchSettings.json` in the IAM API project and adjust the `applicationUrl` for the profile you use most (e.g. `http`):
+
+```json
+"applicationUrl": "http://localhost:5101"
+```
+
+Save the file.
+
+---
+
+## 5.6 Building and running the IAM API
+
+From the repo root, build the backend solution:
+
+```bash
+dotnet build src/backend/BankingSuite.Backend.sln
+```
+
+To run the IAM API from the command line:
+
+```bash
+cd src/backend/Services/IamService/BankingSuite.IamService.API
+dotnet run
+```
+
+Or from **Visual Studio 2026**:
+
+1. Right-click `BankingSuite.IamService.API` → **Set as Startup Project**.
+2. Press **F5** (Debug) or **Ctrl+F5** (Run without debugging).
+
+Open a browser:
+
+```text
+http://localhost:5101/health
+```
+
+You should see JSON similar to:
+
+```json
+{
+  "service": "IamService",
+  "status": "Healthy",
+  "timestampUtc": "2025-01-01T00:00:00Z"
 }
 ```
 
-Later we’ll build domain services and application handlers that return `Result`/`Result<T>` to indicate success or failure in a consistent way.
+Swagger UI should be available at:
+
+```text
+http://localhost:5101/swagger
+```
+
+At this point you have:
+
+- Running .NET 10 IAM API skeleton.
+- FastEndpoints + Swagger wired.
+- BuildingBlocks projects ready to host shared abstractions.
 
 ---
 
-## 5.7 Referencing BuildingBlocks from AccountService.Api
+## 5.7 Solution structure recap
 
-Now we want `AccountService.Api` to be able to use these building blocks.
+Your `src/backend` folder and solution should now look like this:
 
-From `src/backend`:
+```text
+src/backend/
+└─ BankingSuite.Backend.sln
 
-```bash
-cd digital-banking-suite/src/backend
+   BuildingBlocks/
+   ├─ BankingSuite.BuildingBlocks.Domain/
+   ├─ BankingSuite.BuildingBlocks.Application/
+   └─ BankingSuite.BuildingBlocks.Infrastructure/
 
-dotnet add ./AccountService/AccountService.Api/AccountService.Api.csproj \
-  reference ./BuildingBlocks/BuildingBlocks.csproj
+   Services/
+   └─ IamService/
+      ├─ BankingSuite.IamService.Domain/
+      ├─ BankingSuite.IamService.Application/
+      ├─ BankingSuite.IamService.Infrastructure/
+      └─ BankingSuite.IamService.API/
 ```
 
-You can open `AccountService.Api.csproj` and verify a `<ProjectReference>` to `BuildingBlocks.csproj` was added.
-
-Let’s also confirm everything builds:
-
-```bash
-dotnet build BankingSuite.Backend.sln
-```
-
-If there are any compile errors in our new `BuildingBlocks` code, fix them now. You shouldn’t see any if you copied the code as-is.
-
-I> We’re not using `Entity`, `ValueObject`, or `Result` inside `AccountService.Api` yet. That’s okay. They’ll become essential when we introduce real domain models in upcoming chapters (for IAM, Customers, Accounts, and Transactions).
+We will reuse this pattern for **CustomerService**, **AccountService**, **TransactionService** and **NotificationService**.
 
 ---
 
-## 5.8 Updating the CI Pipeline to Build the Backend Solution
+## 5.8 Committing and tagging Chapter 05
 
-In Chapter 4, we fixed the CI restore step to restore all backend `.csproj` files. Now that we have a **backend solution file**, we want CI to:
-
-1. Restore backend projects.
-2. **Build** the backend solution.
-
-Open `.github/workflows/ci.yml` and:
-
-1. Keep the existing “restore backend projects” step from Chapter 4.
-2. Add a new step **after** restore to build the backend solution if it exists.
-
-Add this step:
-
-```yaml
-- name: Build backend solution (if present)
-  run: |
-    if [ -f "./src/backend/BankingSuite.Backend.sln" ]; then
-      echo "Building backend solution..."
-      dotnet build ./src/backend/BankingSuite.Backend.sln --configuration Release
-    else
-      echo "No backend solution found yet. Skipping build."
-    fi
-```
-
-From now on, every PR will:
-
-- Restore any backend project(s) under `src/backend`.
-- Build `BankingSuite.Backend.sln` if it exists.
-
-T> As we add more backend projects (IAM, Customer, Transaction, Notification), we only need to add them to the solution. CI will automatically build all of them as part of the solution build.
-
----
-
-## 5.9 Local Sanity Check (Before Committing)
-
-Before we start committing, let’s quickly run through the key commands locally.
+Follow our usual workflow.
 
 From the repo root:
 
 ```bash
-cd digital-banking-suite
-
-# Restore all backend projects (similar to CI)
-projects=$(find ./src/backend -name "*.csproj")
-for proj in $projects; do
-  echo "Restoring $proj"
-  dotnet restore "$proj"
-done
-
-# Build the backend solution
-dotnet build ./src/backend/BankingSuite.Backend.sln --configuration Release
+git status
+git add src/backend
+git commit -m "ch05: add backend solution, BuildingBlocks and IAM service skeleton"
 ```
 
-If both restore and build succeed locally:
+If you are working in a feature branch (recommended), push it and create a PR into `develop`.  
+After merging, tag the state for this chapter:
 
-- Your solution is wired correctly.
-- `BuildingBlocks` compiles.
-- `AccountService.Api` references `BuildingBlocks` without issues.
+```bash
+git tag -a chapter-05-backend-solution -m "Chapter 05: backend solution and IAM skeleton"
+git push origin chapter-05-backend-solution
+```
 
 ---
 
-## 5.10 Wrap-up: PR, CI & Merge to `develop`
+## 5.9 What’s next
 
-At this point you should have, on the branch  
-`feature/ch05-backend-structure`:
+We now have:
 
-- `BankingSuite.Backend.sln` under `src/backend`.
-- A new `BuildingBlocks` class library with:
-  - `Entity`
-  - `ValueObject`
-  - `Result` / `Result<T>`
-- `AccountService.Api` added to the solution and referencing `BuildingBlocks`.
-- CI updated to build the backend solution.
+- A **backend solution**.
+- Shared **BuildingBlocks** projects.
+- An **IAM service skeleton** with a health endpoint.
 
-Now we finish the Git workflow for the chapter.
+In the next chapter we will:
 
-### 5.10.1 Committing Your Changes
+- Introduce **backend testing**: xUnit projects, basic unit tests and integration tests for the IAM API health endpoint.
+- Integrate **code coverage** with Coverlet and ReportGenerator.
+- Create a first **GitHub Actions** workflow that restores, builds, tests and generates coverage reports for the backend.
 
-Stage and commit your work in logical chunks. For example:
-
-```bash
-git add src/backend/BankingSuite.Backend.sln
-git add src/backend/AccountService/AccountService.Api/AccountService.Api.csproj
-git commit -m "chore(backend): add backend solution and include AccountService.Api"
-
-git add src/backend/BuildingBlocks/*
-git add src/backend/BuildingBlocks/BuildingBlocks.csproj
-git commit -m "feat(building-blocks): add Entity, ValueObject and Result primitives"
-
-git add .github/workflows/ci.yml
-git commit -m "chore(ci): build backend solution in pipeline"
-```
-
-T> As before, you don’t need to match these messages exactly; just keep them **clear and scoped**. Avoid “misc changes” or “stuff”.
-
-### 5.10.2 Pushing and Opening a Pull Request
-
-Push the branch to GitHub:
-
-```bash
-git push -u origin feature/ch05-backend-structure
-```
-
-Then, in GitHub:
-
-1. Open a Pull Request from  
-   `feature/ch05-backend-structure` → `develop`
-2. Give it a clear title, for example:  
-   **"Chapter 5 – Backend Solution Structure & Shared Building Blocks"**
-3. Briefly describe what this PR adds:
-   - Backend solution (`BankingSuite.Backend.sln`)
-   - `BuildingBlocks` library with base types
-   - CI update to build backend solution
-
-### 5.10.3 Watching the CI Pipeline
-
-When you open the PR, the CI workflow (`.github/workflows/ci.yml`) should run automatically.
-
-At this stage, CI will:
-
-- Restore all `.csproj` files under `src/backend`.
-- Build `BankingSuite.Backend.sln` if it exists.
-
-Later chapters will extend CI to:
-
-- Run unit tests (`dotnet test`).
-- Build Docker images.
-- Potentially run linters and static analysis.
-
-W> Do not merge into `develop` if the pipeline is red. Fix the issue (build errors, missing files, etc.), push again, and wait for CI to pass.
-
-### 5.10.4 Merging to `develop`
-
-Once the pipeline is green:
-
-1. Merge the PR into `develop`.
-2. Optionally delete the feature branch:
-
-   - in GitHub (Delete branch button), and/or
-   - locally:
-
-   ```bash
-   git checkout develop
-   git pull origin develop
-   git branch -d feature/ch05-backend-structure
-   ```
-
-At this point:
-
-- `develop` contains all Chapter 5 changes.
-- CI has already validated the backend structure and building blocks.
-- You are ready to start the next chapter from a clean, green baseline.
-
----
-
-## 5.11 Summary & What’s Next
-
-In this chapter, we:
-
-- Created a **backend solution**: `src/backend/BankingSuite.Backend.sln`.
-- Added the existing `AccountService.Api` project to the backend solution.
-- Introduced a reusable **`BuildingBlocks`** library containing:
-  - `Entity` base class
-  - `ValueObject` base class
-  - `Result` / `Result<T>` types for success/failure modeling
-- Updated `AccountService.Api` to reference `BuildingBlocks`.
-- Updated CI to **build the backend solution** on every PR.
-
-These are foundational steps for a maintainable, domain-driven backend. All future services (IAM, Customer, Transaction, Notification) will:
-
-- Join this same backend solution.
-- Reuse the same building blocks.
-
-In the next chapter, we will:
-
-- Introduce **testing foundations** for the backend:
-  - Create a test project (e.g., `AccountService.UnitTests` or `BuildingBlocks.Tests`).
-  - Add the first meaningful tests (for our building blocks or basic API behavior).
-  - Wire `dotnet test` into CI to ensure every PR runs tests.
-
-From now on, the backend isn’t just “some projects in a folder”.  
-It’s a structured solution with shared building blocks, built and validated by CI on every change.
+From that point on, every backend chapter will be built on top of this **test-first, CI-aware** foundation.
