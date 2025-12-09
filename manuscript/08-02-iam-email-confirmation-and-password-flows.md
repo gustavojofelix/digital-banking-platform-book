@@ -67,11 +67,24 @@ If you already added `AddDefaultTokenProviders()` in a previous chapter, there i
 
 Our flows need to send real emails (or at least log them in dev).
 
-We keep things simple and define a minimal abstraction inside IAM’s Application layer (you can move this to BuildingBlocks later if you want it shared across services):
+We keep things simple and define a minimal abstraction inside IAM’s Application layer (you can move this to BuildingBlocks later if you want it shared across services).
 
-Create:
+In **Visual Studio 2026**:
 
-- `src/backend/services/iam/BankingSuite.IAM.Application/Common/Interfaces/IEmailSender.cs`
+1. In **Solution Explorer**, locate the project:  
+   `BankingSuite.IAM.Application`.
+2. If you don’t have a `Common` folder yet:
+   - Right-click `BankingSuite.IAM.Application`  
+     → **Add** → **New Folder…**  
+     → name it `Common`.
+3. Under `Common`, create an `Interfaces` folder:
+   - Right-click the `Common` folder  
+     → **Add** → **New Folder…**  
+     → name it `Interfaces`.
+4. Right-click the `Interfaces` folder  
+   → **Add** → **Class…**  
+   → name it `IEmailSender.cs`.
+5. Replace the contents of `IEmailSender.cs` with:
 
 ```csharp
 namespace BankingSuite.IAM.Application.Common.Interfaces;
@@ -113,12 +126,31 @@ Even if you don’t change registration yet, these endpoints will still work for
   - Call `UserManager.ConfirmEmailAsync(user, token)`
 - Output: success or error
 
-Create:
+In **Visual Studio 2026**, inside `BankingSuite.IAM.Application`:
 
-- `src/backend/services/iam/BankingSuite.IAM.Application/Auth/Commands/ConfirmEmail/ConfirmEmailCommand.cs`
-- `src/backend/services/iam/BankingSuite.IAM.Application/Auth/Commands/ConfirmEmail/ConfirmEmailCommandHandler.cs`
+1. In **Solution Explorer**, locate the project:  
+   `BankingSuite.IAM.Application`.
+2. If you don’t already have an `Auth` folder:
+   - Right-click `BankingSuite.IAM.Application`  
+     → **Add** → **New Folder…**  
+     → name it `Auth`.
+3. Under `Auth`, create a `Commands` folder:
+   - Right-click the `Auth` folder  
+     → **Add** → **New Folder…**  
+     → name it `Commands`.
+4. Under `Commands`, create a `ConfirmEmail` folder:
+   - Right-click the `Commands` folder  
+     → **Add** → **New Folder…**  
+     → name it `ConfirmEmail`.
 
-**ConfirmEmailCommand**
+Now add the command and handler.
+
+#### ConfirmEmailCommand
+
+1. Right-click the `ConfirmEmail` folder  
+   → **Add** → **Class…**  
+   → name it `ConfirmEmailCommand.cs`.
+2. Replace the contents with:
 
 ```csharp
 using MediatR;
@@ -128,7 +160,12 @@ namespace BankingSuite.IAM.Application.Auth.Commands.ConfirmEmail;
 public sealed record ConfirmEmailCommand(Guid UserId, string Token) : IRequest;
 ```
 
-**ConfirmEmailCommandHandler**
+#### ConfirmEmailCommandHandler
+
+1. Right-click the `ConfirmEmail` folder again  
+   → **Add** → **Class…**  
+   → name it `ConfirmEmailCommandHandler.cs`.
+2. Replace the contents with:
 
 ```csharp
 using BankingSuite.IAM.Domain;
@@ -178,12 +215,21 @@ public sealed class ConfirmEmailCommandHandler(UserManager<ApplicationUser> user
   - Build confirmation link (configurable base URL)
   - Send email via `IEmailSender`
 
-Create:
+In **Visual Studio 2026**, still inside `BankingSuite.IAM.Application`:
 
-- `src/backend/services/iam/BankingSuite.IAM.Application/Auth/Commands/ResendConfirmation/ResendConfirmationEmailCommand.cs`
-- `src/backend/services/iam/BankingSuite.IAM.Application/Auth/Commands/ResendConfirmation/ResendConfirmationEmailCommandHandler.cs`
+1. Under `Auth` → `Commands`, create a new folder:
+   - Right-click the `Commands` folder  
+     → **Add** → **New Folder…**  
+     → name it `ResendConfirmation`.
 
-**ResendConfirmationEmailCommand**
+Now add the command and handler.
+
+#### ResendConfirmationEmailCommand
+
+1. Right-click the `ResendConfirmation` folder  
+   → **Add** → **Class…**  
+   → name it `ResendConfirmationEmailCommand.cs`.
+2. Replace the contents with:
 
 ```csharp
 using MediatR;
@@ -199,7 +245,12 @@ We pass a `ConfirmationBaseUrl` so the Application layer can generate links like
 
 Later, the Angular frontend (or config) will control the base URL.
 
-**ResendConfirmationEmailCommandHandler**
+#### ResendConfirmationEmailCommandHandler
+
+1. Right-click the `ResendConfirmation` folder  
+   → **Add** → **Class…**  
+   → name it `ResendConfirmationEmailCommandHandler.cs`.
+2. Replace the contents with:
 
 ```csharp
 using System.Web;
@@ -258,16 +309,27 @@ public sealed class ResendConfirmationEmailCommandHandler(
 
 We now expose these commands via HTTP.
 
-Create:
+In **Visual Studio 2026**, inside the IAM API project:
 
-- `src/backend/services/iam/BankingSuite.IAM.Api/Endpoints/Auth/ConfirmEmailEndpoint.cs`
-- `src/backend/services/iam/BankingSuite.IAM.Api/Endpoints/Auth/ResendConfirmationEndpoint.cs`
+1. In **Solution Explorer**, locate the project:  
+   `BankingSuite.IAM.Api`.
+2. Ensure there is an `Endpoints` folder. If not:
+   - Right-click `BankingSuite.IAM.Api`  
+     → **Add** → **New Folder…**  
+     → name it `Endpoints`.
+3. Under `Endpoints`, ensure there is an `Auth` folder:
+   - Right-click `Endpoints`  
+     → **Add** → **New Folder…**  
+     → name it `Auth` (if it doesn’t exist yet).
 
-**ConfirmEmailEndpoint**
+Now add the endpoints.
 
-Confirmation is usually triggered via a **GET link** from an email:
+#### ConfirmEmailEndpoint
 
-`GET /api/iam/auth/confirm-email?userId={id}&token={token}`
+1. Right-click the `Auth` folder  
+   → **Add** → **Class…**  
+   → name it `ConfirmEmailEndpoint.cs`.
+2. Replace the contents with:
 
 ```csharp
 using BankingSuite.IAM.Application.Auth.Commands.ConfirmEmail;
@@ -306,11 +368,16 @@ public sealed class ConfirmEmailEndpoint(IMediator mediator)
 }
 ```
 
-**ResendConfirmationEndpoint**
+Confirmation is usually triggered via a **GET link** from an email:
 
-Admin, support users, or the employee themselves (unauthenticated) can call:
+`GET /api/iam/auth/confirm-email?userId={id}&token={token}`
 
-`POST /api/iam/auth/resend-confirmation`
+#### ResendConfirmationEndpoint
+
+1. Right-click the `Auth` folder  
+   → **Add** → **Class…**  
+   → name it `ResendConfirmationEndpoint.cs`.
+2. Replace the contents with:
 
 ```csharp
 using BankingSuite.IAM.Application.Auth.Commands.ResendConfirmation;
@@ -399,12 +466,21 @@ All of them rely on Identity’s built-in methods:
   - Build reset link
   - Send email
 
-Create:
+In **Visual Studio 2026**, inside `BankingSuite.IAM.Application`:
 
-- `src/backend/services/iam/BankingSuite.IAM.Application/Auth/Commands/ForgotPassword/ForgotPasswordCommand.cs`
-- `src/backend/services/iam/BankingSuite.IAM.Application/Auth/Commands/ForgotPassword/ForgotPasswordCommandHandler.cs`
+1. Under `Auth` → `Commands`, create a folder:
+   - Right-click the `Commands` folder  
+     → **Add** → **New Folder…**  
+     → name it `ForgotPassword`.
 
-**ForgotPasswordCommand**
+Now add the command and handler.
+
+#### ForgotPasswordCommand
+
+1. Right-click the `ForgotPassword` folder  
+   → **Add** → **Class…**  
+   → name it `ForgotPasswordCommand.cs`.
+2. Replace the contents with:
 
 ```csharp
 using MediatR;
@@ -414,7 +490,12 @@ namespace BankingSuite.IAM.Application.Auth.Commands.ForgotPassword;
 public sealed record ForgotPasswordCommand(string Email, string ResetBaseUrl) : IRequest;
 ```
 
-**ForgotPasswordCommandHandler**
+#### ForgotPasswordCommandHandler
+
+1. Right-click the `ForgotPassword` folder  
+   → **Add** → **Class…**  
+   → name it `ForgotPasswordCommandHandler.cs`.
+2. Replace the contents with:
 
 ```csharp
 using System.Web;
@@ -478,12 +559,21 @@ public sealed class ForgotPasswordCommandHandler(
   - Find user by email
   - Call `ResetPasswordAsync`
 
-Create:
+In **Visual Studio 2026**, inside `BankingSuite.IAM.Application`:
 
-- `src/backend/services/iam/BankingSuite.IAM.Application/Auth/Commands/ResetPassword/ResetPasswordCommand.cs`
-- `src/backend/services/iam/BankingSuite.IAM.Application/Auth/Commands/ResetPassword/ResetPasswordCommandHandler.cs`
+1. Under `Auth` → `Commands`, create a folder:
+   - Right-click the `Commands` folder  
+     → **Add** → **New Folder…**  
+     → name it `ResetPassword`.
 
-**ResetPasswordCommand**
+Now add the command and handler.
+
+#### ResetPasswordCommand
+
+1. Right-click the `ResetPassword` folder  
+   → **Add** → **Class…**  
+   → name it `ResetPasswordCommand.cs`.
+2. Replace the contents with:
 
 ```csharp
 using MediatR;
@@ -496,7 +586,12 @@ public sealed record ResetPasswordCommand(
     string NewPassword) : IRequest;
 ```
 
-**ResetPasswordCommandHandler**
+#### ResetPasswordCommandHandler
+
+1. Right-click the `ResetPassword` folder  
+   → **Add** → **Class…**  
+   → name it `ResetPasswordCommandHandler.cs`.
+2. Replace the contents with:
 
 ```csharp
 using BankingSuite.IAM.Domain;
@@ -539,11 +634,18 @@ public sealed class ResetPasswordCommandHandler(UserManager<ApplicationUser> use
 ### 8.3.3 CQRS: Change Password for Logged-in User
 
 For this, we need the current user’s identity.  
-If you don’t have it yet, define a simple interface:
+If you don’t have it yet, define a simple interface.
 
-Create:
+#### ICurrentUser interface
 
-- `src/backend/services/iam/BankingSuite.IAM.Application/Common/Interfaces/ICurrentUser.cs`
+In **Visual Studio 2026**, inside `BankingSuite.IAM.Application`:
+
+1. If you already created the `Common/Interfaces` folders for `IEmailSender`, reuse them. Otherwise:
+   - Create `Common` and `Interfaces` folders as described in **8.2.3**.
+2. Right-click the `Interfaces` folder  
+   → **Add** → **Class…**  
+   → name it `ICurrentUser.cs`.
+3. Replace the contents with:
 
 ```csharp
 namespace BankingSuite.IAM.Application.Common.Interfaces;
@@ -558,12 +660,21 @@ public interface ICurrentUser
 
 You’ll implement this in the API project using `IHttpContextAccessor` and JWT claims. (We’ll assume that’s in place from earlier chapters.)
 
-Now the command:
+Now add the command and handler.
 
-- `src/backend/services/iam/BankingSuite.IAM.Application/Auth/Commands/ChangePassword/ChangePasswordCommand.cs`
-- `src/backend/services/iam/BankingSuite.IAM.Application/Auth/Commands/ChangePassword/ChangePasswordCommandHandler.cs`
+In **Visual Studio 2026**, inside `BankingSuite.IAM.Application`:
 
-**ChangePasswordCommand**
+1. Under `Auth` → `Commands`, create a folder:
+   - Right-click the `Commands` folder  
+     → **Add** → **New Folder…**  
+     → name it `ChangePassword`.
+
+#### ChangePasswordCommand
+
+1. Right-click the `ChangePassword` folder  
+   → **Add** → **Class…**  
+   → name it `ChangePasswordCommand.cs`.
+2. Replace the contents with:
 
 ```csharp
 using MediatR;
@@ -575,7 +686,12 @@ public sealed record ChangePasswordCommand(
     string NewPassword) : IRequest;
 ```
 
-**ChangePasswordCommandHandler**
+#### ChangePasswordCommandHandler
+
+1. Right-click the `ChangePassword` folder  
+   → **Add** → **Class…**  
+   → name it `ChangePasswordCommandHandler.cs`.
+2. Replace the contents with:
 
 ```csharp
 using BankingSuite.IAM.Application.Common.Interfaces;
@@ -628,13 +744,18 @@ public sealed class ChangePasswordCommandHandler(
 
 Now we add endpoints that call these commands.
 
-Create:
+In **Visual Studio 2026**, inside the IAM API project:
 
-- `src/backend/services/iam/BankingSuite.IAM.Api/Endpoints/Auth/ForgotPasswordEndpoint.cs`
-- `src/backend/services/iam/BankingSuite.IAM.Api/Endpoints/Auth/ResetPasswordEndpoint.cs`
-- `src/backend/services/iam/BankingSuite.IAM.Api/Endpoints/Auth/ChangePasswordEndpoint.cs`
+1. Ensure you have `Endpoints/Auth` from the previous section. If not, create them as described in **8.2.3**.
 
-**ForgotPasswordEndpoint**
+We’ll add three endpoint classes to the `Auth` folder.
+
+#### ForgotPasswordEndpoint
+
+1. Right-click the `Auth` folder  
+   → **Add** → **Class…**  
+   → name it `ForgotPasswordEndpoint.cs`.
+2. Replace the contents with:
 
 ```csharp
 using BankingSuite.IAM.Application.Auth.Commands.ForgotPassword;
@@ -684,7 +805,12 @@ public sealed class ForgotPasswordEndpoint(IMediator mediator, IConfiguration co
 }
 ```
 
-**ResetPasswordEndpoint**
+#### ResetPasswordEndpoint
+
+1. Right-click the `Auth` folder  
+   → **Add** → **Class…**  
+   → name it `ResetPasswordEndpoint.cs`.
+2. Replace the contents with:
 
 ```csharp
 using BankingSuite.IAM.Application.Auth.Commands.ResetPassword;
@@ -726,7 +852,12 @@ public sealed class ResetPasswordEndpoint(IMediator mediator)
 }
 ```
 
-**ChangePasswordEndpoint**
+#### ChangePasswordEndpoint
+
+1. Right-click the `Auth` folder  
+   → **Add** → **Class…**  
+   → name it `ChangePasswordEndpoint.cs`.
+2. Replace the contents with:
 
 ```csharp
 using BankingSuite.IAM.Application.Auth.Commands.ChangePassword;
@@ -793,4 +924,4 @@ git commit -m "Chapter 08: add email confirmation and password flows to IAM"
 git push --set-upstream origin part2-chapter08-iam-email-confirmation-password-flows
 ```
 
-In the next file (`08-03-iam-2fa-and-security-hardening.md`), we’ll take this even further by adding a **two-factor authentication (2FA) flow** using one-time codes sent via email and tightening the overall security posture of the IAM service.
+In the next section (`08-03-iam-2fa-and-security-hardening`), we’ll take this even further by adding a **two-factor authentication (2FA) flow** using one-time codes sent via email and tightening the overall security posture of the IAM service.

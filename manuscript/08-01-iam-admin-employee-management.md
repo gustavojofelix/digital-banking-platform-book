@@ -57,9 +57,18 @@ We’ll do all changes in this branch, run tests, then open a PR into `develop` 
 
 We want paging to be **consistent** across all microservices. Instead of redefining `PagedResult<T>` inside IAM, we put it once into our **BuildingBlocks** project and reuse it everywhere.
 
-Create (or update) this file:
+In **Visual Studio 2026**:
 
-- `src/backend/building-blocks/BankingSuite.BuildingBlocks.Application/Models/PagedResult.cs`
+1. In **Solution Explorer**, locate the project:  
+   `BankingSuite.BuildingBlocks.Application`.
+2. If you don’t already have a `Models` folder:
+   - Right-click **BankingSuite.BuildingBlocks.Application**  
+     → **Add** → **New Folder…**  
+     → name it `Models`.
+3. Right-click the `Models` folder  
+   → **Add** → **Class…**  
+   → name it `PagedResult.cs`.
+4. Replace the contents of `PagedResult.cs` with:
 
 ```csharp
 namespace BankingSuite.BuildingBlocks.Application.Models;
@@ -85,7 +94,7 @@ Key points:
 - `[]` is a modern C# **collection expression** used to create an empty list
 - Reusable paging metadata (`TotalPages`, `HasNextPage`, `HasPreviousPage`)
 
-In IAM we will simply add:
+In IAM (and other services) we will simply add:
 
 ```csharp
 using BankingSuite.BuildingBlocks.Application.Models;
@@ -99,16 +108,20 @@ whenever we need paged results.
 
 Our IAM service is **single-tenant** for a fictitious Alvor Bank, so one bank, one IAM. We still want richer user information and explicit activation state.
 
-Open `ApplicationUser` in the IAM Domain project (path may vary, adjust to your repo):
+In **Visual Studio 2026**, open the IAM Domain project:
 
-- `src/backend/services/iam/BankingSuite.IAM.Domain/ApplicationUser.cs`
+1. In **Solution Explorer**, locate:  
+   `BankingSuite.IamService.Domain`.
+2. Find and open the `ApplicationUser` class file:  
+   `ApplicationUser.cs` (path may look like  
+   `src/backend/services/iam/BankingSuite.IamService.Domain/ApplicationUser.cs`).
 
 Make sure it looks like this (or equivalent):
 
 ```csharp
 using Microsoft.AspNetCore.Identity;
 
-namespace BankingSuite.IAM.Domain;
+namespace BankingSuite.IamService.Domain;
 
 public sealed class ApplicationUser : IdentityUser<Guid>
 {
@@ -132,12 +145,25 @@ If the entity changed, don’t forget to generate and apply a new migration late
 
 In this IAM, every `ApplicationUser` is effectively a **bank employee**. We’ll keep DTOs in an `Employees` feature folder.
 
-Create:
+In **Visual Studio 2026**:
 
-- `src/backend/services/iam/BankingSuite.IAM.Application/Employees/Dtos/EmployeeDtos.cs`
+1. In **Solution Explorer**, locate the project:  
+   `BankingSuite.IamService.Application`.
+2. If you don’t already have an `Employees` folder:
+   - Right-click **BankingSuite.IamService.Application**  
+     → **Add** → **New Folder…**  
+     → name it `Employees`.
+3. Under `Employees`, create a `Dtos` folder:
+   - Right-click the `Employees` folder  
+     → **Add** → **New Folder…**  
+     → name it `Dtos`.
+4. Right-click the `Dtos` folder  
+   → **Add** → **Class…**  
+   → name it `EmployeeDtos.cs`.
+5. Replace the contents of `EmployeeDtos.cs` with:
 
 ```csharp
-namespace BankingSuite.IAM.Application.Employees.Dtos;
+namespace BankingSuite.IamService.Application.Employees.Dtos;
 
 public sealed class EmployeeSummaryDto
 {
@@ -167,21 +193,33 @@ We include `Roles` so the admin UI can show or edit roles without extra round-tr
 
 We model our use cases as **CQRS messages** using MediatR and modern C# records.
 
-Create:
+In **Visual Studio 2026**, inside `BankingSuite.IamService.Application`:
 
-- `src/backend/services/iam/BankingSuite.IAM.Application/Employees/Queries/ListEmployeesQuery.cs`
-- `src/backend/services/iam/BankingSuite.IAM.Application/Employees/Queries/GetEmployeeDetailsQuery.cs`
-- `src/backend/services/iam/BankingSuite.IAM.Application/Employees/Commands/UpdateEmployeeCommand.cs`
-- `src/backend/services/iam/BankingSuite.IAM.Application/Employees/Commands/EmployeeActivationCommands.cs`
+1. Ensure you have the `Employees` folder (from the previous step).
+2. Under `Employees`, create a `Queries` folder:
+   - Right-click `Employees`  
+     → **Add** → **New Folder…**  
+     → name it `Queries`.
+3. Under `Employees`, create a `Commands` folder:
+   - Right-click `Employees`  
+     → **Add** → **New Folder…**  
+     → name it `Commands`.
 
-**ListEmployeesQuery**
+Now add the individual classes.
+
+#### ListEmployeesQuery
+
+1. Right-click the `Queries` folder  
+   → **Add** → **Class…**  
+   → name it `ListEmployeesQuery.cs`.
+2. Replace the contents of `ListEmployeesQuery.cs` with:
 
 ```csharp
 using BankingSuite.BuildingBlocks.Application.Models;
-using BankingSuite.IAM.Application.Employees.Dtos;
+using BankingSuite.IamService.Application.Employees.Dtos;
 using MediatR;
 
-namespace BankingSuite.IAM.Application.Employees.Queries;
+namespace BankingSuite.IamService.Application.Employees.Queries;
 
 public sealed record ListEmployeesQuery(
     int PageNumber,
@@ -191,24 +229,34 @@ public sealed record ListEmployeesQuery(
 ) : IRequest<PagedResult<EmployeeSummaryDto>>;
 ```
 
-**GetEmployeeDetailsQuery**
+#### GetEmployeeDetailsQuery
+
+1. Right-click the `Queries` folder again  
+   → **Add** → **Class…**  
+   → name it `GetEmployeeDetailsQuery.cs`.
+2. Replace the contents with:
 
 ```csharp
-using BankingSuite.IAM.Application.Employees.Dtos;
+using BankingSuite.IamService.Application.Employees.Dtos;
 using MediatR;
 
-namespace BankingSuite.IAM.Application.Employees.Queries;
+namespace BankingSuite.IamService.Application.Employees.Queries;
 
 public sealed record GetEmployeeDetailsQuery(Guid EmployeeId)
     : IRequest<EmployeeDetailsDto?>;
 ```
 
-**UpdateEmployeeCommand**
+#### UpdateEmployeeCommand
+
+1. Right-click the `Commands` folder  
+   → **Add** → **Class…**  
+   → name it `UpdateEmployeeCommand.cs`.
+2. Replace the contents with:
 
 ```csharp
 using MediatR;
 
-namespace BankingSuite.IAM.Application.Employees.Commands;
+namespace BankingSuite.IamService.Application.Employees.Commands;
 
 public sealed record UpdateEmployeeCommand(
     Guid EmployeeId,
@@ -218,12 +266,17 @@ public sealed record UpdateEmployeeCommand(
 ) : IRequest;
 ```
 
-**Activate / Deactivate Employee Commands**
+#### Activate / Deactivate Employee Commands
+
+1. Right-click the `Commands` folder  
+   → **Add** → **Class…**  
+   → name it `EmployeeActivationCommands.cs`.
+2. Replace the contents with:
 
 ```csharp
 using MediatR;
 
-namespace BankingSuite.IAM.Application.Employees.Commands;
+namespace BankingSuite.IamService.Application.Employees.Commands;
 
 public sealed record ActivateEmployeeCommand(Guid EmployeeId) : IRequest;
 
@@ -240,7 +293,7 @@ Just like we did for the login flow (`Auth/Commands/Login`), we’ll keep each
 **command/query and its handler together in the same folder**. This makes it easy
 to navigate per use case and keeps the Application layer consistent.
 
-Our structure under `BankingSuite.IAM.Application` will look like this:
+Our structure under `BankingSuite.IamService.Application` will look like this:
 
 - `Employees/Queries/ListEmployees/ListEmployeesQuery.cs`
 - `Employees/Queries/ListEmployees/ListEmployeesQueryHandler.cs`
@@ -260,20 +313,28 @@ next to them.
 
 #### ListEmployeesQueryHandler
 
-Create:
+In **Visual Studio 2026**:
 
-- `src/backend/services/iam/BankingSuite.IAM.Application/Employees/Queries/ListEmployees/ListEmployeesQueryHandler.cs`
+1. Under `Employees` → `Queries`, create a folder:
+   - Right-click the `Queries` folder  
+     → **Add** → **New Folder…**  
+     → name it `ListEmployees`.
+2. Move `ListEmployeesQuery.cs` into this new `ListEmployees` folder (optional but recommended for consistency).
+3. Right-click the `ListEmployees` folder  
+   → **Add** → **Class…**  
+   → name it `ListEmployeesQueryHandler.cs`.
+4. Replace the contents of `ListEmployeesQueryHandler.cs` with:
 
 ```csharp
 using BankingSuite.BuildingBlocks.Application.Models;
-using BankingSuite.IAM.Application.Employees.Dtos;
-using BankingSuite.IAM.Application.Employees.Queries;
-using BankingSuite.IAM.Domain;
+using BankingSuite.IamService.Application.Employees.Dtos;
+using BankingSuite.IamService.Application.Employees.Queries;
+using BankingSuite.IamService.Domain;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
-namespace BankingSuite.IAM.Application.Employees.Queries.ListEmployees;
+namespace BankingSuite.IamService.Application.Employees.Queries.ListEmployees;
 
 public sealed class ListEmployeesQueryHandler
     : IRequestHandler<ListEmployeesQuery, PagedResult<EmployeeSummaryDto>>
@@ -345,19 +406,27 @@ public sealed class ListEmployeesQueryHandler
 
 #### GetEmployeeDetailsQueryHandler
 
-Create:
+In **Visual Studio 2026**:
 
-- `src/backend/services/iam/BankingSuite.IAM.Application/Employees/Queries/GetEmployeeDetails/GetEmployeeDetailsQueryHandler.cs`
+1. Under `Employees` → `Queries`, create another folder:
+   - Right-click the `Queries` folder  
+     → **Add** → **New Folder…**  
+     → name it `GetEmployeeDetails`.
+2. Move `GetEmployeeDetailsQuery.cs` into this `GetEmployeeDetails` folder.
+3. Right-click the `GetEmployeeDetails` folder  
+   → **Add** → **Class…**  
+   → name it `GetEmployeeDetailsQueryHandler.cs`.
+4. Replace the contents of `GetEmployeeDetailsQueryHandler.cs` with:
 
 ```csharp
-using BankingSuite.IAM.Application.Employees.Dtos;
-using BankingSuite.IAM.Application.Employees.Queries;
-using BankingSuite.IAM.Domain;
+using BankingSuite.IamService.Application.Employees.Dtos;
+using BankingSuite.IamService.Application.Employees.Queries;
+using BankingSuite.IamService.Domain;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
-namespace BankingSuite.IAM.Application.Employees.Queries.GetEmployeeDetails;
+namespace BankingSuite.IamService.Application.Employees.Queries.GetEmployeeDetails;
 
 public sealed class GetEmployeeDetailsQueryHandler
     : IRequestHandler<GetEmployeeDetailsQuery, EmployeeDetailsDto?>
@@ -401,18 +470,26 @@ public sealed class GetEmployeeDetailsQueryHandler
 
 #### UpdateEmployeeCommandHandler
 
-Create:
+In **Visual Studio 2026**:
 
-- `src/backend/services/iam/BankingSuite.IAM.Application/Employees/Commands/UpdateEmployee/UpdateEmployeeCommandHandler.cs`
+1. Under `Employees` → `Commands`, create a folder:
+   - Right-click the `Commands` folder  
+     → **Add** → **New Folder…**  
+     → name it `UpdateEmployee`.
+2. Move `UpdateEmployeeCommand.cs` into this `UpdateEmployee` folder.
+3. Right-click the `UpdateEmployee` folder  
+   → **Add** → **Class…**  
+   → name it `UpdateEmployeeCommandHandler.cs`.
+4. Replace the contents with:
 
 ```csharp
-using BankingSuite.IAM.Application.Employees.Commands;
-using BankingSuite.IAM.Domain;
+using BankingSuite.IamService.Application.Employees.Commands;
+using BankingSuite.IamService.Domain;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
-namespace BankingSuite.IAM.Application.Employees.Commands.UpdateEmployee;
+namespace BankingSuite.IamService.Application.Employees.Commands.UpdateEmployee;
 
 public sealed class UpdateEmployeeCommandHandler : IRequestHandler<UpdateEmployeeCommand>
 {
@@ -477,21 +554,26 @@ public sealed class UpdateEmployeeCommandHandler : IRequestHandler<UpdateEmploye
 
 #### Activate / Deactivate Employee Handlers
 
-Create:
+In **Visual Studio 2026**:
 
-- `src/backend/services/iam/BankingSuite.IAM.Application/Employees/Commands/ActivateEmployee/ActivateEmployeeCommandHandler.cs`
-- `src/backend/services/iam/BankingSuite.IAM.Application/Employees/Commands/DeactivateEmployee/DeactivateEmployeeCommandHandler.cs`
-
-**ActivateEmployeeCommandHandler**
+1. Under `Employees` → `Commands`, create a folder:
+   - Right-click the `Commands` folder  
+     → **Add** → **New Folder…**  
+     → name it `ActivateEmployee`.
+2. Move `ActivateEmployeeCommand` (inside `EmployeeActivationCommands.cs`) into its own file if you prefer, or leave the commands file as-is and just place the handler here.
+3. Right-click the `ActivateEmployee` folder  
+   → **Add** → **Class…**  
+   → name it `ActivateEmployeeCommandHandler.cs`.
+4. Replace the contents of `ActivateEmployeeCommandHandler.cs` with:
 
 ```csharp
-using BankingSuite.IAM.Application.Employees.Commands;
-using BankingSuite.IAM.Domain;
+using BankingSuite.IamService.Application.Employees.Commands;
+using BankingSuite.IamService.Domain;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
-namespace BankingSuite.IAM.Application.Employees.Commands.ActivateEmployee;
+namespace BankingSuite.IamService.Application.Employees.Commands.ActivateEmployee;
 
 public sealed class ActivateEmployeeCommandHandler : IRequestHandler<ActivateEmployeeCommand>
 {
@@ -523,16 +605,23 @@ public sealed class ActivateEmployeeCommandHandler : IRequestHandler<ActivateEmp
 }
 ```
 
-**DeactivateEmployeeCommandHandler**
+5. Under `Employees` → `Commands`, create another folder:
+   - Right-click the `Commands` folder  
+     → **Add** → **New Folder…**  
+     → name it `DeactivateEmployee`.
+6. Right-click the `DeactivateEmployee` folder  
+   → **Add** → **Class…**  
+   → name it `DeactivateEmployeeCommandHandler.cs`.
+7. Replace the contents with:
 
 ```csharp
-using BankingSuite.IAM.Application.Employees.Commands;
-using BankingSuite.IAM.Domain;
+using BankingSuite.IamService.Application.Employees.Commands;
+using BankingSuite.IamService.Domain;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
-namespace BankingSuite.IAM.Application.Employees.Commands.DeactivateEmployee;
+namespace BankingSuite.IamService.Application.Employees.Commands.DeactivateEmployee;
 
 public sealed class DeactivateEmployeeCommandHandler : IRequestHandler<DeactivateEmployeeCommand>
 {
@@ -582,18 +671,37 @@ Now we expose this functionality via **FastEndpoints**. Each endpoint:
 - Sends it via `IMediator`
 - Returns the appropriate HTTP response
 
-Create the following files in the IAM API project:
+In **Visual Studio 2026**, inside the IAM API project:
 
-- `src/backend/services/iam/BankingSuite.IAM.Api/Endpoints/Admin/Employees/ListEmployeesEndpoint.cs`
-- `src/backend/services/iam/BankingSuite.IAM.Api/Endpoints/Admin/Employees/GetEmployeeEndpoint.cs`
-- `src/backend/services/iam/BankingSuite.IAM.Api/Endpoints/Admin/Employees/UpdateEmployeeEndpoint.cs`
-- `src/backend/services/iam/BankingSuite.IAM.Api/Endpoints/Admin/Employees/EmployeeStatusEndpoints.cs`
-- (Optional) `IamAdminGroup` if you use FastEndpoints groups
+1. In **Solution Explorer**, locate the project:  
+   `BankingSuite.IamService.Api`.
+2. Ensure you have an `Endpoints` folder. If not:
+   - Right-click `BankingSuite.IamService.Api`  
+     → **Add** → **New Folder…**  
+     → name it `Endpoints`.
+3. Under `Endpoints`, create an `Admin` folder:
+   - Right-click `Endpoints`  
+     → **Add** → **New Folder…**  
+     → name it `Admin`.
+4. Under `Admin`, create an `Employees` folder:
+   - Right-click `Admin`  
+     → **Add** → **New Folder…**  
+     → name it `Employees`.
 
-First, define the request DTOs:
+We’ll add:
+
+- A file for the admin employee request DTOs.
+- One file per endpoint.
+
+#### Admin Employee Request DTOs
+
+1. Right-click the `Employees` folder  
+   → **Add** → **Class…**  
+   → name it `AdminEmployeeRequests.cs`.
+2. Replace the contents with:
 
 ```csharp
-namespace BankingSuite.IAM.Api.Endpoints.Admin.Employees;
+namespace BankingSuite.IamService.Api.Endpoints.Admin.Employees;
 
 public sealed class ListEmployeesRequest
 {
@@ -623,15 +731,20 @@ public sealed class EmployeeStatusRequest
 }
 ```
 
-**ListEmployeesEndpoint**
+#### ListEmployeesEndpoint
+
+1. Right-click the `Employees` folder  
+   → **Add** → **Class…**  
+   → name it `ListEmployeesEndpoint.cs`.
+2. Replace the contents with:
 
 ```csharp
 using BankingSuite.BuildingBlocks.Application.Models;
-using BankingSuite.IAM.Application.Employees.Dtos;
-using BankingSuite.IAM.Application.Employees.Queries;
+using BankingSuite.IamService.Application.Employees.Dtos;
+using BankingSuite.IamService.Application.Employees.Queries;
 using MediatR;
 
-namespace BankingSuite.IAM.Api.Endpoints.Admin.Employees;
+namespace BankingSuite.IamService.Api.Endpoints.Admin.Employees;
 
 public sealed class ListEmployeesEndpoint(IMediator mediator)
     : Endpoint<ListEmployeesRequest, PagedResult<EmployeeSummaryDto>>
@@ -658,14 +771,19 @@ public sealed class ListEmployeesEndpoint(IMediator mediator)
 }
 ```
 
-**GetEmployeeEndpoint**
+#### GetEmployeeEndpoint
+
+1. Right-click the `Employees` folder  
+   → **Add** → **Class…**  
+   → name it `GetEmployeeEndpoint.cs`.
+2. Replace the contents with:
 
 ```csharp
-using BankingSuite.IAM.Application.Employees.Dtos;
-using BankingSuite.IAM.Application.Employees.Queries;
+using BankingSuite.IamService.Application.Employees.Dtos;
+using BankingSuite.IamService.Application.Employees.Queries;
 using MediatR;
 
-namespace BankingSuite.IAM.Api.Endpoints.Admin.Employees;
+namespace BankingSuite.IamService.Api.Endpoints.Admin.Employees;
 
 public sealed class GetEmployeeEndpoint(IMediator mediator)
     : Endpoint<EmployeeByIdRequest, EmployeeDetailsDto>
@@ -694,13 +812,18 @@ public sealed class GetEmployeeEndpoint(IMediator mediator)
 }
 ```
 
-**UpdateEmployeeEndpoint**
+#### UpdateEmployeeEndpoint
+
+1. Right-click the `Employees` folder  
+   → **Add** → **Class…**  
+   → name it `UpdateEmployeeEndpoint.cs`.
+2. Replace the contents with:
 
 ```csharp
-using BankingSuite.IAM.Application.Employees.Commands;
+using BankingSuite.IamService.Application.Employees.Commands;
 using MediatR;
 
-namespace BankingSuite.IAM.Api.Endpoints.Admin.Employees;
+namespace BankingSuite.IamService.Api.Endpoints.Admin.Employees;
 
 public sealed class UpdateEmployeeEndpoint(IMediator mediator)
     : Endpoint<UpdateEmployeeRequest>
@@ -727,13 +850,18 @@ public sealed class UpdateEmployeeEndpoint(IMediator mediator)
 }
 ```
 
-**Activate / Deactivate Employee Endpoints**
+#### Activate / Deactivate Employee Endpoints
+
+1. Right-click the `Employees` folder  
+   → **Add** → **Class…**  
+   → name it `EmployeeStatusEndpoints.cs`.
+2. Replace the contents with:
 
 ```csharp
-using BankingSuite.IAM.Application.Employees.Commands;
+using BankingSuite.IamService.Application.Employees.Commands;
 using MediatR;
 
-namespace BankingSuite.IAM.Api.Endpoints.Admin.Employees;
+namespace BankingSuite.IamService.Api.Endpoints.Admin.Employees;
 
 public sealed class ActivateEmployeeEndpoint(IMediator mediator)
     : Endpoint<EmployeeStatusRequest>
@@ -781,9 +909,216 @@ All using FastEndpoints + CQRS + Identity + modern C#.
 
 ---
 
-### 8.1.8 Quick Local Test, Commit and Push
+### 8.1.8 Update Database: Migration & Seed Initial IAM Data
 
-Build and run the backend (using your usual dev compose or Aspire setup), then hit the new endpoints via Swagger or a REST client:
+Before we hit the new admin endpoints, we want the database to be in a **known good state**:
+
+- The `AspNetUsers` table includes our new fields (`FullName`, `IsActive`, `LastLoginAt`).
+- Default IAM roles exist (`Employee`, `IamAdmin`, `SuperAdmin`).
+- A default **admin employee** exists so we can log into the admin UI later.
+
+We’ll:
+
+1. Add an EF Core migration for the new `ApplicationUser` fields.
+2. Create a **database seeder** that ensures roles and a default admin user are present.
+3. Hook the seeder into `Program.cs`.
+
+> In the next section (originally 8.1.8, now 8.1.9) we’ll run a quick local test, then commit and push.
+
+---
+
+#### 8.1.8.1 Add EF Core Migration for IamService
+
+We assume:
+
+- `IamDbContext` lives in the **Infrastructure** project  
+  `BankingSuite.IamService.Infrastructure`
+- The API project is `BankingSuite.IamService.Api`.
+
+From the repo root:
+
+```bash
+cd src/backend
+
+dotnet ef migrations add AddAdminEmployeeFieldsToApplicationUser \
+  -p services/iamservice/BankingSuite.IamService.Infrastructure/BankingSuite.IamService.Infrastructure.csproj \
+  -s services/iamservice/BankingSuite.IamService.Api/BankingSuite.IamService.Api.csproj
+```
+
+This will generate a new migration in:
+
+- `src/backend/services/iamservice/BankingSuite.IamService.Infrastructure/Migrations/`
+
+> If you prefer Visual Studio 2026:  
+> **Tools → NuGet Package Manager → Package Manager Console** and run the same `dotnet ef` command from the `src/backend` folder.
+
+Don’t worry about the exact auto-generated migration code; the important thing is that it adds/updates the columns for:
+
+- `FullName`
+- `IsActive`
+- `LastLoginAt`
+
+We’ll let the seeder handle **roles and users** at runtime.
+
+---
+
+#### 8.1.8.2 Create IamService Database Seeder (Roles + Admin User)
+
+We’ll add a small **Infrastructure** helper that:
+
+- Applies migrations on startup.
+- Ensures the default roles exist.
+- Creates a default admin employee if needed and assigns roles.
+
+In **Visual Studio 2026**, inside the IamService Infrastructure project:
+
+1. In **Solution Explorer**, locate:  
+   `src/backend/services/iamservice/BankingSuite.IamService.Infrastructure`.
+2. Expand the `Persistence` folder (where `IamDbContext` lives).  
+   If it doesn’t exist, right-click the project → **Add** → **New Folder…** → name it `Persistence`.
+3. Right-click the `Persistence` folder → **Add** → **Class…**  
+   Name it: `IamDbContextSeed.cs`.
+
+Replace the contents with:
+
+```csharp
+using BankingSuite.IamService.Domain;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace BankingSuite.IamService.Infrastructure.Persistence;
+
+public static class IamDbContextSeed
+{
+    public static async Task SeedAsync(IServiceProvider services)
+    {
+        using var scope = services.CreateScope();
+
+        var context     = scope.ServiceProvider.GetRequiredService<IamDbContext>();
+        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<ApplicationRole>>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+
+        // Apply pending migrations (safe to call multiple times)
+        await context.Database.MigrateAsync();
+
+        string[] roles =
+        [
+            "Employee",
+            "IamAdmin",
+            "SuperAdmin"
+        ];
+
+        foreach (var roleName in roles)
+        {
+            if (!await roleManager.RoleExistsAsync(roleName))
+            {
+                await roleManager.CreateAsync(new ApplicationRole { Name = roleName });
+            }
+        }
+
+        const string adminEmail    = "admin@alvorbank.test";
+        const string adminPassword = "Admin123!";
+
+        var admin = await userManager.FindByEmailAsync(adminEmail);
+
+        if (admin is null)
+        {
+            admin = new ApplicationUser
+            {
+                UserName         = adminEmail,
+                Email            = adminEmail,
+                FullName         = "Alvor Bank IAM Admin",
+                EmailConfirmed   = true,
+                IsActive         = true,
+                TwoFactorEnabled = false
+            };
+
+            var createResult = await userManager.CreateAsync(admin, adminPassword);
+
+            if (!createResult.Succeeded)
+            {
+                var errors = string.Join("; ", createResult.Errors.Select(e => e.Description));
+                throw new InvalidOperationException($"Failed to create default admin user: {errors}");
+            }
+        }
+
+        var desiredRoles = new[] { "Employee", "IamAdmin", "SuperAdmin" };
+        var currentRoles = await userManager.GetRolesAsync(admin);
+        var missingRoles = desiredRoles.Except(currentRoles).ToArray();
+
+        if (missingRoles.Length > 0)
+        {
+            var addRolesResult = await userManager.AddToRolesAsync(admin, missingRoles);
+
+            if (!addRolesResult.Succeeded)
+            {
+                var errors = string.Join("; ", addRolesResult.Errors.Select(e => e.Description));
+                throw new InvalidOperationException($"Failed to assign roles to admin user: {errors}");
+            }
+        }
+    }
+}
+```
+
+Key points:
+
+- We call `Database.MigrateAsync()` so the app always applies migrations on startup.
+- We create three roles: `Employee`, `IamAdmin`, `SuperAdmin`.
+- We create a default IAM admin user:
+  - Email: `admin@alvorbank.test`
+  - Password: `Admin123!` (dev/demo only – in production you’d rotate this)
+- We assign **all three roles** to the admin user.
+
+---
+
+#### 8.1.8.3 Hook the Seeder Into Program.cs
+
+Finally, we call the seeder during IamService API startup.
+
+In **Visual Studio 2026**, inside the IamService API project:
+
+1. Locate `src/backend/services/iam/BankingSuite.IamService.Api/Program.cs`.
+2. At the top of the file, add:
+
+   ```csharp
+   using BankingSuite.IamService.Infrastructure.Persistence;
+   ```
+
+3. After `var app = builder.Build();` (and before `app.Run();`), call the seeder:
+
+   ```csharp
+   var app = builder.Build();
+
+   // Apply migrations and seed IAM data (roles + default admin)
+   await IamDbContextSeed.SeedAsync(app.Services);
+
+   // existing middleware/endpoint configuration
+   app.UseAuthentication();
+   app.UseAuthorization();
+
+   app.UseFastEndpoints();
+   app.UseOpenApi();
+   app.UseSwaggerUi3();
+
+   app.Run();
+   ```
+
+> Because we’re using top-level statements in .NET 10, `Program` is already an `async Task Main`, so `await IamDbContextSeed.SeedAsync(...)` is valid.
+
+Now, any time you run the IamService API locally:
+
+- The latest migrations are applied.
+- The roles exist.
+- The default admin user exists and has the correct roles.
+
+In the **next section** (8.1.9), we’ll do a **quick local test**, then commit these changes and push the `part2-chapter08-iam-admin-employee-management` branch.
+
+---
+
+### 8.1.9 Quick Local Test, Commit and Push
+
+Build and run the backend (using your usual dev compose), then hit the new endpoints via Swagger or a REST client:
 
 - `GET    /api/iam/admin/employees`
 - `GET    /api/iam/admin/employees/{id}`
@@ -798,9 +1133,9 @@ git status
 
 git add \
   src/backend/building-blocks/BankingSuite.BuildingBlocks.Application/Models/PagedResult.cs \
-  src/backend/services/iam/BankingSuite.IAM.Domain/ApplicationUser.cs \
-  src/backend/services/iam/BankingSuite.IAM.Application/Employees/**/* \
-  src/backend/services/iam/BankingSuite.IAM.Api/Endpoints/Admin/Employees/**/*
+  src/backend/services/iam/BankingSuite.IamService.Domain/ApplicationUser.cs \
+  src/backend/services/iam/BankingSuite.IamService.Application/Employees/**/* \
+  src/backend/services/iam/BankingSuite.IamService.Api/Endpoints/Admin/Employees/**/*
 
 git commit -m "Chapter 08: add IAM admin employee management endpoints"
 git push --set-upstream origin part2-chapter08-iam-admin-employee-management

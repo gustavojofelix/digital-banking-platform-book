@@ -64,6 +64,7 @@ We’ll implement a **simple email-based 2FA**:
      - Return it to the client.
 
 3. **Enable / Disable 2FA**
+
    - Endpoints for the **currently logged-in employee**:
      - `POST /api/iam/auth/2fa/enable`
      - `POST /api/iam/auth/2fa/disable`
@@ -87,9 +88,19 @@ We extend the login flow to be able to represent **two types of result**:
 If you already have a `LoginResult` / `LoginResponse` type from a previous section, **add** the new properties to it.  
 For completeness, here is a canonical shape you can use or adapt.
 
-Create/update:
+In **Visual Studio 2026**, inside `BankingSuite.IAM.Application`:
 
-- `src/backend/services/iam/BankingSuite.IAM.Application/Auth/Commands/Login/LoginResult.cs`
+1. In **Solution Explorer**, locate the project:  
+   `BankingSuite.IAM.Application`.
+2. If you don’t already have `Auth/Commands/Login`:
+   - Right-click `BankingSuite.IAM.Application` → **Add** → **New Folder…** → name it `Auth`.
+   - Right-click the `Auth` folder → **Add** → **New Folder…** → name it `Commands`.
+   - Right-click the `Commands` folder → **Add** → **New Folder…** → name it `Login`.
+3. Under `Auth/Commands/Login`, either:
+   - Open existing `LoginResult.cs`, **or**
+   - Right-click the `Login` folder → **Add** → **Class…** → name it `LoginResult.cs`.
+
+Replace or update the contents of `LoginResult.cs`:
 
 ```csharp
 namespace BankingSuite.IAM.Application.Auth.Commands.Login;
@@ -129,12 +140,14 @@ We assume you already have:
 - `LoginCommand` (e.g. `record LoginCommand(string Email, string Password) : IRequest<LoginResult>`)
 - A token generator service used in the previous section (replace `IJwtTokenGenerator` with your actual interface name if different).
 
-Example:
+In **Visual Studio 2026**, inside `BankingSuite.IAM.Application`:
 
-- `src/backend/services/iam/BankingSuite.IAM.Application/Auth/Commands/Login/LoginCommandHandler.cs`
+1. Under `Auth/Commands/Login`, open `LoginCommandHandler.cs`.
+   - If it doesn’t exist, right-click the `Login` folder → **Add** → **Class…** → name it `LoginCommandHandler.cs`.
+
+Replace the contents with:
 
 ```csharp
-using BankingSuite.IAM.Application.Auth.Commands.Login;
 using BankingSuite.IAM.Application.Common.Interfaces;
 using BankingSuite.IAM.Domain;
 using MediatR;
@@ -227,12 +240,19 @@ Now we create a dedicated command to:
 - Verify a 2FA code for a given user
 - Return a normal `LoginResult` with a JWT if successful
 
-Create:
+In **Visual Studio 2026**, inside `BankingSuite.IAM.Application`:
 
-- `src/backend/services/iam/BankingSuite.IAM.Application/Auth/Commands/VerifyTwoFactor/VerifyTwoFactorCommand.cs`
-- `src/backend/services/iam/BankingSuite.IAM.Application/Auth/Commands/VerifyTwoFactor/VerifyTwoFactorCommandHandler.cs`
+1. Under `Auth` → `Commands`, create a folder:
+   - Right-click the `Commands` folder → **Add** → **New Folder…** → name it `VerifyTwoFactor`.
 
-**VerifyTwoFactorCommand**
+Now add the command and handler.
+
+#### VerifyTwoFactorCommand
+
+1. Right-click the `VerifyTwoFactor` folder  
+   → **Add** → **Class…**  
+   → name it `VerifyTwoFactorCommand.cs`.
+2. Replace the contents with:
 
 ```csharp
 using MediatR;
@@ -244,10 +264,16 @@ public sealed record VerifyTwoFactorCommand(
     string Code) : IRequest<LoginResult>;
 ```
 
-**VerifyTwoFactorCommandHandler**
+#### VerifyTwoFactorCommandHandler
+
+1. Right-click the `VerifyTwoFactor` folder  
+   → **Add** → **Class…**  
+   → name it `VerifyTwoFactorCommandHandler.cs`.
+2. Replace the contents with:
 
 ```csharp
 using BankingSuite.IAM.Application.Auth.Commands.Login;
+using BankingSuite.IAM.Application.Common.Interfaces;
 using BankingSuite.IAM.Domain;
 using MediatR;
 using Microsoft.AspNetCore.Identity;
@@ -307,9 +333,17 @@ public sealed class VerifyTwoFactorCommandHandler(
 
 We now expose this as an HTTP endpoint the frontend can call after the user enters the code.
 
-Create:
+In **Visual Studio 2026**, inside `BankingSuite.IAM.Api`:
 
-- `src/backend/services/iam/BankingSuite.IAM.Api/Endpoints/Auth/VerifyTwoFactorEndpoint.cs`
+1. In **Solution Explorer**, ensure you have an `Endpoints/Auth` folder (from earlier sections).
+   - If not, create `Endpoints` and then `Auth` as described in 8.2.
+
+Now add the endpoint:
+
+1. Right-click the `Auth` folder  
+   → **Add** → **Class…**  
+   → name it `VerifyTwoFactorEndpoint.cs`.
+2. Replace the contents with:
 
 ```csharp
 using BankingSuite.IAM.Application.Auth.Commands.Login;
@@ -368,14 +402,19 @@ We’ll:
 - Use `ICurrentUser` to know who is logged in.
 - Require the **current password** to avoid unauthorized changes.
 
-Create:
+In **Visual Studio 2026**, inside `BankingSuite.IAM.Application`:
 
-- `src/backend/services/iam/BankingSuite.IAM.Application/Auth/Commands/TwoFactor/EnableTwoFactorCommand.cs`
-- `src/backend/services/iam/BankingSuite.IAM.Application/Auth/Commands/TwoFactor/EnableTwoFactorCommandHandler.cs`
-- `src/backend/services/iam/BankingSuite.IAM.Application/Auth/Commands/TwoFactor/DisableTwoFactorCommand.cs`
-- `src/backend/services/iam/BankingSuite.IAM.Application/Auth/Commands/TwoFactor/DisableTwoFactorCommandHandler.cs`
+1. Under `Auth` → `Commands`, create a folder:
+   - Right-click the `Commands` folder → **Add** → **New Folder…** → name it `TwoFactor`.
 
-**EnableTwoFactorCommand**
+Now add the commands and handlers.
+
+#### EnableTwoFactorCommand
+
+1. Right-click the `TwoFactor` folder  
+   → **Add** → **Class…**  
+   → name it `EnableTwoFactorCommand.cs`.
+2. Replace the contents with:
 
 ```csharp
 using MediatR;
@@ -385,7 +424,12 @@ namespace BankingSuite.IAM.Application.Auth.Commands.TwoFactor;
 public sealed record EnableTwoFactorCommand(string CurrentPassword) : IRequest;
 ```
 
-**EnableTwoFactorCommandHandler**
+#### EnableTwoFactorCommandHandler
+
+1. Right-click the `TwoFactor` folder  
+   → **Add** → **Class…**  
+   → name it `EnableTwoFactorCommandHandler.cs`.
+2. Replace the contents with:
 
 ```csharp
 using BankingSuite.IAM.Application.Common.Interfaces;
@@ -434,7 +478,12 @@ public sealed class EnableTwoFactorCommandHandler(
 }
 ```
 
-**DisableTwoFactorCommand**
+#### DisableTwoFactorCommand
+
+1. Right-click the `TwoFactor` folder  
+   → **Add** → **Class…**  
+   → name it `DisableTwoFactorCommand.cs`.
+2. Replace the contents with:
 
 ```csharp
 using MediatR;
@@ -444,7 +493,12 @@ namespace BankingSuite.IAM.Application.Auth.Commands.TwoFactor;
 public sealed record DisableTwoFactorCommand(string CurrentPassword) : IRequest;
 ```
 
-**DisableTwoFactorCommandHandler**
+#### DisableTwoFactorCommandHandler
+
+1. Right-click the `TwoFactor` folder  
+   → **Add** → **Class…**  
+   → name it `DisableTwoFactorCommandHandler.cs`.
+2. Replace the contents with:
 
 ```csharp
 using BankingSuite.IAM.Application.Common.Interfaces;
@@ -497,9 +551,14 @@ public sealed class DisableTwoFactorCommandHandler(
 
 ### 8.4.8 FastEndpoints: Enable / Disable 2FA
 
-Create:
+In **Visual Studio 2026**, inside `BankingSuite.IAM.Api`:
 
-- `src/backend/services/iam/BankingSuite.IAM.Api/Endpoints/Auth/TwoFactorSettingsEndpoints.cs`
+1. Ensure the `Endpoints/Auth` folder exists.
+2. Right-click the `Auth` folder  
+   → **Add** → **Class…**  
+   → name it `TwoFactorSettingsEndpoints.cs`.
+
+Replace the contents with:
 
 ```csharp
 using BankingSuite.IAM.Application.Auth.Commands.TwoFactor;
@@ -650,6 +709,7 @@ To push IAM coverage high (80%+), add tests for:
    - Change password (correct vs incorrect current password)
 
 3. **2FA Flows** (this file):
+
    - Login with 2FA disabled → token returned, `RequiresTwoFactor = false`
    - Login with 2FA enabled → email code generated, `RequiresTwoFactor = true`
    - Verify 2FA with valid code → token returned
@@ -685,7 +745,7 @@ git push --set-upstream origin part2-chapter08-iam-2fa-and-security-hardening
 
 At this point, our IAM service is ready for a **real Angular 21 + Nx** frontend:
 
-- Admins can manage employees (Status, roles, 2FA flag)
+- Admins can manage employees (status, roles, 2FA flag)
 - Employees can confirm email, reset password, change password
 - Optional email-based 2FA is supported during login
 
